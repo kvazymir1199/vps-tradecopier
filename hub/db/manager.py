@@ -143,3 +143,60 @@ class DatabaseManager:
             (status, closed_at, master_id, slave_id, master_ticket),
         )
         await self._conn.commit()
+
+    async def get_active_links(self, master_id: str) -> list[dict]:
+        return await self.fetch_all(
+            "SELECT * FROM master_slave_links WHERE master_id = ? AND enabled = 1",
+            (master_id,),
+        )
+
+    async def get_symbol_mappings(self, link_id: int) -> dict[str, str]:
+        rows = await self.fetch_all(
+            "SELECT master_symbol, slave_symbol FROM symbol_mappings WHERE link_id = ?",
+            (link_id,),
+        )
+        return {r["master_symbol"]: r["slave_symbol"] for r in rows}
+
+    async def get_magic_mappings(self, link_id: int) -> dict[int, int]:
+        rows = await self.fetch_all(
+            "SELECT master_setup_id, slave_setup_id FROM magic_mappings WHERE link_id = ?",
+            (link_id,),
+        )
+        return {r["master_setup_id"]: r["slave_setup_id"] for r in rows}
+
+    async def insert_heartbeat(
+        self,
+        terminal_id: str,
+        vps_id: str,
+        ts_ms: int,
+        status_code: int,
+        status_message: str,
+        last_error: str,
+    ):
+        await self._conn.execute(
+            "INSERT INTO heartbeats (terminal_id, vps_id, ts_ms, status_code, status_message, last_error) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (terminal_id, vps_id, ts_ms, status_code, status_message, last_error),
+        )
+        await self._conn.execute(
+            "UPDATE terminals SET last_heartbeat = ? WHERE terminal_id = ?",
+            (ts_ms, terminal_id),
+        )
+        await self._conn.commit()
+
+    async def purge_old_heartbeats(self, max_age_days: int = 7):
+        cutoff = self._now_ms() - (max_age_days * 86400 * 1000)
+        await self._conn.execute(
+            "DELETE FROM heartbeats WHERE ts_ms < ?", (cutoff,)
+        )
+        await self._conn.commit()
+
+    async def purge_old_messages(self, max_age_days: int = 30):
+        cutoff = self._now_ms() - (max_age_days * 86400 * 1000)
+        await self._conn.execute(
+            "DELETE FROM message_acks WHERE ts_ms < ?", (cutoff,)
+        )
+        await self._conn.execute(
+            "DELETE FROM messages WHERE ts_ms < ?", (cutoff,)
+        )
+        await self._conn.commit()

@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from hub.db.manager import DatabaseManager
 
@@ -110,3 +112,48 @@ async def test_update_trade_mapping_closed(db):
     )
     assert row["status"] == "closed"
     assert row["closed_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_get_active_links_for_master(db):
+    await db.register_terminal("master_1", "master", 111, "B1")
+    await db.register_terminal("slave_1", "slave", 222, "B2")
+    await db.register_terminal("slave_2", "slave", 333, "B3")
+    await db.execute(
+        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, symbol_suffix, created_at) VALUES (?, ?, 1, 'multiplier', 2.0, '.s', ?)",
+        ("master_1", "slave_1", 1700000000000),
+    )
+    await db.execute(
+        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, symbol_suffix, created_at) VALUES (?, ?, 0, 'fixed', 0.05, '.f', ?)",
+        ("master_1", "slave_2", 1700000000000),
+    )
+    links = await db.get_active_links("master_1")
+    assert len(links) == 1
+    assert links[0]["slave_id"] == "slave_1"
+    assert links[0]["lot_mode"] == "multiplier"
+
+
+@pytest.mark.asyncio
+async def test_insert_heartbeat(db):
+    await db.register_terminal("slave_1", "slave", 222, "B2")
+    await db.insert_heartbeat("slave_1", "vps_1", 1700000000000, 0, "Active", "")
+    row = await db.fetch_one(
+        "SELECT * FROM heartbeats WHERE terminal_id = 'slave_1'"
+    )
+    assert row["vps_id"] == "vps_1"
+    term = await db.fetch_one(
+        "SELECT last_heartbeat FROM terminals WHERE terminal_id = 'slave_1'"
+    )
+    assert term["last_heartbeat"] == 1700000000000
+
+
+@pytest.mark.asyncio
+async def test_purge_old_heartbeats(db):
+    await db.register_terminal("slave_1", "slave", 222, "B2")
+    old_ts = 1700000000000
+    new_ts = int(time.time() * 1000)
+    await db.insert_heartbeat("slave_1", "vps_1", old_ts, 0, "Active", "")
+    await db.insert_heartbeat("slave_1", "vps_1", new_ts, 0, "Active", "")
+    await db.purge_old_heartbeats(max_age_days=0)
+    rows = await db.fetch_all("SELECT * FROM heartbeats")
+    assert len(rows) <= 1
