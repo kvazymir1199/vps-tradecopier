@@ -62,3 +62,84 @@ class DatabaseManager:
             (status, status_message, terminal_id),
         )
         await self._conn.commit()
+
+    async def insert_message(
+        self, msg_id: int, master_id: str, msg_type: str, payload: str, ts_ms: int
+    ):
+        await self._conn.execute(
+            "INSERT INTO messages (msg_id, master_id, type, payload, ts_ms, status) "
+            "VALUES (?, ?, ?, ?, ?, 'pending')",
+            (msg_id, master_id, msg_type, payload, ts_ms),
+        )
+        await self._conn.commit()
+
+    async def update_message_status(
+        self, msg_id: int, master_id: str, status: str
+    ):
+        await self._conn.execute(
+            "UPDATE messages SET status = ? WHERE msg_id = ? AND master_id = ?",
+            (status, msg_id, master_id),
+        )
+        await self._conn.commit()
+
+    async def insert_ack(
+        self,
+        msg_id: int,
+        master_id: str,
+        slave_id: str,
+        ack_type: str,
+        nack_reason: str | None,
+        slave_ticket: int | None,
+        ts_ms: int,
+    ):
+        await self._conn.execute(
+            "INSERT INTO message_acks "
+            "(msg_id, master_id, slave_id, ack_type, nack_reason, slave_ticket, ts_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (msg_id, master_id, slave_id, ack_type, nack_reason, slave_ticket, ts_ms),
+        )
+        await self._conn.commit()
+
+    async def insert_trade_mapping(
+        self,
+        master_id: str,
+        slave_id: str,
+        master_ticket: int,
+        slave_ticket: int | None,
+        master_magic: int,
+        slave_magic: int,
+        symbol: str,
+        master_volume: float,
+        slave_volume: float,
+    ):
+        now = self._now_ms()
+        await self._conn.execute(
+            "INSERT INTO trade_mappings "
+            "(master_id, slave_id, master_ticket, slave_ticket, master_magic, slave_magic, "
+            "symbol, master_volume, slave_volume, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
+            (master_id, slave_id, master_ticket, slave_ticket, master_magic,
+             slave_magic, symbol, master_volume, slave_volume, now),
+        )
+        await self._conn.commit()
+
+    async def update_trade_mapping_ack(
+        self, master_id: str, slave_id: str, master_ticket: int, slave_ticket: int
+    ):
+        await self._conn.execute(
+            "UPDATE trade_mappings SET slave_ticket = ?, status = 'open' "
+            "WHERE master_id = ? AND slave_id = ? AND master_ticket = ?",
+            (slave_ticket, master_id, slave_id, master_ticket),
+        )
+        await self._conn.commit()
+
+    async def update_trade_mapping_status(
+        self, master_id: str, slave_id: str, master_ticket: int, status: str
+    ):
+        closed_at = self._now_ms() if status in ("closed", "failed") else None
+        await self._conn.execute(
+            "UPDATE trade_mappings SET status = ?, closed_at = ? "
+            "WHERE master_id = ? AND slave_id = ? AND master_ticket = ?",
+            (status, closed_at, master_id, slave_id, master_ticket),
+        )
+        await self._conn.commit()

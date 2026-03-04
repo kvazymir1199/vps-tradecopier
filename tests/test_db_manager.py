@@ -50,3 +50,63 @@ async def test_update_terminal_status(db):
         "SELECT status FROM terminals WHERE terminal_id = ?", ("master_1",)
     )
     assert row["status"] == "Active"
+
+
+@pytest.mark.asyncio
+async def test_insert_message(db):
+    await db.insert_message(1, "master_1", "OPEN", '{"ticket":123}', 1700000000000)
+    row = await db.fetch_one(
+        "SELECT * FROM messages WHERE msg_id = 1 AND master_id = 'master_1'"
+    )
+    assert row["type"] == "OPEN"
+    assert row["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_insert_ack(db):
+    await db.insert_message(1, "master_1", "OPEN", '{"ticket":123}', 1700000000000)
+    await db.insert_ack(1, "master_1", "slave_1", "ACK", None, 87654321, 1700000000500)
+    row = await db.fetch_one(
+        "SELECT * FROM message_acks WHERE msg_id = 1 AND slave_id = 'slave_1'"
+    )
+    assert row["ack_type"] == "ACK"
+    assert row["slave_ticket"] == 87654321
+
+
+@pytest.mark.asyncio
+async def test_insert_trade_mapping(db):
+    await db.insert_trade_mapping(
+        "master_1", "slave_1", 123, None, 15010301, 15010305, "EURUSD.s", 0.1, 0.2
+    )
+    row = await db.fetch_one(
+        "SELECT * FROM trade_mappings WHERE master_ticket = 123"
+    )
+    assert row["status"] == "pending"
+    assert row["slave_magic"] == 15010305
+
+
+@pytest.mark.asyncio
+async def test_update_trade_mapping_on_ack(db):
+    await db.insert_trade_mapping(
+        "master_1", "slave_1", 123, None, 15010301, 15010305, "EURUSD.s", 0.1, 0.2
+    )
+    await db.update_trade_mapping_ack("master_1", "slave_1", 123, slave_ticket=87654321)
+    row = await db.fetch_one(
+        "SELECT * FROM trade_mappings WHERE master_ticket = 123"
+    )
+    assert row["status"] == "open"
+    assert row["slave_ticket"] == 87654321
+
+
+@pytest.mark.asyncio
+async def test_update_trade_mapping_closed(db):
+    await db.insert_trade_mapping(
+        "master_1", "slave_1", 123, None, 15010301, 15010305, "EURUSD.s", 0.1, 0.2
+    )
+    await db.update_trade_mapping_ack("master_1", "slave_1", 123, slave_ticket=87654321)
+    await db.update_trade_mapping_status("master_1", "slave_1", 123, "closed")
+    row = await db.fetch_one(
+        "SELECT * FROM trade_mappings WHERE master_ticket = 123"
+    )
+    assert row["status"] == "closed"
+    assert row["closed_at"] is not None
