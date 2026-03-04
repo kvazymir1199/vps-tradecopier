@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+*.db
+*.db-wal
+*.db-shm
+.pytest_cache/
+dist/
+*.egg-info/
+node_modules/
+.next/
+config/config.json
+uv.lock
