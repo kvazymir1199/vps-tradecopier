@@ -1,0 +1,29 @@
+{
+  "db_path": "C:\\TradeCopier\\data\\copier.db",
+  "vps_id": "vps_1",
+  "heartbeat_interval_sec": 10,
+  "heartbeat_timeout_sec": 30,
+  "ack_timeout_sec": 5,
+  "ack_max_retries": 3,
+  "resend_window_size": 200,
+  "alert_dedup_minutes": 5,
+  "telegram": {
+    "enabled": true,
+    "bot_token": "YOUR_BOT_TOKEN",
+    "chat_id": "YOUR_CHAT_ID"
+  },
+  "email": {
+    "enabled": false,
+    "smtp_host": "",
+    "smtp_port": 587,
+    "username": "",
+    "password": "",
+    "from_addr": "",
+    "to_addr": ""
+  },
+  "backup": {
+    "enabled": true,
+    "dir": "C:\\TradeCopier\\backups",
+    "retention_days": 7
+  }
+}
