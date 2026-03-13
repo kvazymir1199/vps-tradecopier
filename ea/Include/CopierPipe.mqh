@@ -6,19 +6,20 @@
 #define COPIER_PIPE_MQH
 
 #import "kernel32.dll"
-   int    CreateFileW(string lpFileName, uint dwDesiredAccess,
-                      uint dwShareMode, int lpSecurityAttributes,
+   long   CreateFileW(string lpFileName, uint dwDesiredAccess,
+                      uint dwShareMode, long lpSecurityAttributes,
                       uint dwCreationDisposition, uint dwFlagsAndAttributes,
-                      int hTemplateFile);
-   int    WriteFile(int hFile, uchar &lpBuffer[], uint nNumberOfBytesToWrite,
-                    uint &lpNumberOfBytesWritten, int lpOverlapped);
-   int    ReadFile(int hFile, uchar &lpBuffer[], uint nNumberOfBytesToRead,
-                   uint &lpNumberOfBytesRead, int lpOverlapped);
-   int    PeekNamedPipe(int hNamedPipe, uchar &lpBuffer[], uint nBufferSize,
+                      long hTemplateFile);
+   int    WriteFile(long hFile, uchar &lpBuffer[], uint nNumberOfBytesToWrite,
+                    uint &lpNumberOfBytesWritten, long lpOverlapped);
+   int    ReadFile(long hFile, uchar &lpBuffer[], uint nNumberOfBytesToRead,
+                   uint &lpNumberOfBytesRead, long lpOverlapped);
+   int    PeekNamedPipe(long hNamedPipe, uchar &lpBuffer[], uint nBufferSize,
                         uint &lpBytesRead, uint &lpTotalBytesAvail,
                         uint &lpBytesLeftThisMessage);
-   int    CloseHandle(int hObject);
+   int    CloseHandle(long hObject);
    uint   GetLastError();
+   int    WaitNamedPipeW(string lpNamedPipeName, uint nTimeOut);
 #import
 
 //--- Constants
@@ -26,6 +27,7 @@
 #define COPIER_PIPE_GENERIC_RW       0xC0000000  // GENERIC_READ | GENERIC_WRITE
 #define COPIER_PIPE_OPEN_EXISTING    3
 #define COPIER_PIPE_BUFFER_SIZE      8192
+#define COPIER_PIPE_WAIT_TIMEOUT     2000  // ms to wait if pipe is busy
 
 //+------------------------------------------------------------------+
 //| CCopierPipe — named pipe client class                            |
@@ -33,7 +35,7 @@
 class CCopierPipe
 {
 private:
-   int      m_handle;
+   long     m_handle;
    string   m_pipeName;
    string   m_recvBuffer;   // accumulates partial reads
 
@@ -94,9 +96,27 @@ bool CCopierPipe::Connect(string pipeName)
 
    if(m_handle == COPIER_PIPE_INVALID_HANDLE)
    {
-      uint err = GetLastError();
-      PrintFormat("[CopierPipe] Connect failed to %s — Win32 error %u", fullPath, err);
-      return false;
+      uint err = kernel32::GetLastError();
+
+      // ERROR_PIPE_BUSY (231) — pipe exists but all instances are busy
+      if(err == 231)
+      {
+         if(WaitNamedPipeW(fullPath, COPIER_PIPE_WAIT_TIMEOUT) != 0)
+         {
+            // Pipe became available, retry CreateFileW
+            m_handle = CreateFileW(fullPath,
+                                   COPIER_PIPE_GENERIC_RW,
+                                   0, 0,
+                                   COPIER_PIPE_OPEN_EXISTING,
+                                   0, 0);
+         }
+      }
+
+      if(m_handle == COPIER_PIPE_INVALID_HANDLE)
+      {
+         PrintFormat("[CopierPipe] Connect failed to %s — Win32 error %u", fullPath, err);
+         return false;
+      }
    }
 
    m_recvBuffer = "";
@@ -161,7 +181,7 @@ bool CCopierPipe::Send(string message)
 
    if(result == 0)
    {
-      uint err = GetLastError();
+      uint err = kernel32::GetLastError();
       PrintFormat("[CopierPipe] WriteFile failed — Win32 error %u", err);
       Disconnect();
       return false;
@@ -192,7 +212,7 @@ string CCopierPipe::Receive()
 
    if(peekResult == 0)
    {
-      uint err = GetLastError();
+      uint err = kernel32::GetLastError();
       PrintFormat("[CopierPipe] PeekNamedPipe failed — Win32 error %u", err);
       Disconnect();
       return "";
@@ -210,7 +230,7 @@ string CCopierPipe::Receive()
 
       if(readResult == 0)
       {
-         uint err = GetLastError();
+         uint err = kernel32::GetLastError();
          PrintFormat("[CopierPipe] ReadFile failed — Win32 error %u", err);
          Disconnect();
          return "";

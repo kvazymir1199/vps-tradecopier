@@ -10,7 +10,7 @@ def encode_master_message(msg: MasterMessage) -> str:
         "ts_ms": msg.ts_ms,
         "payload": msg.payload,
     }
-    return json.dumps(data) + "\n"
+    return json.dumps(data, separators=(',', ':')) + "\n"
 
 
 def decode_master_message(raw: str) -> MasterMessage:
@@ -33,7 +33,7 @@ def encode_slave_command(cmd: SlaveCommand) -> str:
         "ts_ms": cmd.ts_ms,
         "payload": cmd.payload,
     }
-    return json.dumps(data) + "\n"
+    return json.dumps(data, separators=(',', ':')) + "\n"
 
 
 def decode_ack(raw: str) -> AckMessage:

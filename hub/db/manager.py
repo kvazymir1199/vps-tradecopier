@@ -144,10 +144,14 @@ class DatabaseManager:
         )
         await self._conn.commit()
 
-    async def get_active_links(self, master_id: str) -> list[dict]:
+    async def get_active_links(self, master_id: str | None = None) -> list[dict]:
+        if master_id:
+            return await self.fetch_all(
+                "SELECT * FROM master_slave_links WHERE master_id = ? AND enabled = 1",
+                (master_id,),
+            )
         return await self.fetch_all(
-            "SELECT * FROM master_slave_links WHERE master_id = ? AND enabled = 1",
-            (master_id,),
+            "SELECT * FROM master_slave_links WHERE enabled = 1",
         )
 
     async def get_symbol_mappings(self, link_id: int) -> dict[str, str]:

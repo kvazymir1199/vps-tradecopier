@@ -20,10 +20,10 @@ input string PipeName     = "copier_master_1";
 input int    HeartbeatSec = 10;
 
 //+------------------------------------------------------------------+
-//| Magic number filter: only track 15XXXXXX positions               |
+//| Magic number filter: set both to 0 to track ALL positions        |
 //+------------------------------------------------------------------+
-#define MAGIC_MIN 15000000
-#define MAGIC_MAX 16000000
+input long InpMagicMin = 0;   // Min magic (0 = no filter)
+input long InpMagicMax = 0;   // Max magic (0 = no filter)
 
 //+------------------------------------------------------------------+
 //| Tracked position state                                           |
@@ -188,8 +188,11 @@ void ScanPositions()
          continue;
 
       long magic = (long)PositionGetInteger(POSITION_MAGIC);
-      if(magic < MAGIC_MIN || magic >= MAGIC_MAX)
-         continue;
+      if(InpMagicMin != 0 || InpMagicMax != 0)
+      {
+         if(magic < InpMagicMin || magic >= InpMagicMax)
+            continue;
+      }
 
       TrackedPosition pos;
       pos.ticket    = (long)ticket;
