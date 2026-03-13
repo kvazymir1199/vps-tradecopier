@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { fetchApi } from "@/lib/api";
 import { Terminal } from "@/types";
 
-export function useTerminals(pollInterval = 5000) {
+export function useTerminals(pollInterval = 2000) {
   const [terminals, setTerminals] = useState<Terminal[]>([]);
   const [loading, setLoading] = useState(true);
 

@@ -49,7 +49,12 @@ export function TerminalsTable() {
                 <TableCell>{t.account_number ?? "-"}</TableCell>
                 <TableCell>{t.broker_server ?? "-"}</TableCell>
                 <TableCell>
-                  <StatusBadge status={t.status} />
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={t.status} />
+                    {t.status_message && t.status_message !== "OK" && (
+                      <span className="text-xs text-muted-foreground">{t.status_message}</span>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>{formatTimeAgo(t.last_heartbeat)}</TableCell>
               </TableRow>

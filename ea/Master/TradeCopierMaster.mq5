@@ -157,10 +157,14 @@ void OnTimer()
    //--- Heartbeat
    if(TimeLocal() - g_lastHeartbeat >= HeartbeatSec)
    {
+      int broker_connected = (int)TerminalInfoInteger(TERMINAL_CONNECTED);
+      int status_code = broker_connected ? 0 : 1;
+      string status_msg = broker_connected ? "OK" : "No broker connection";
+
       string hbMsg = BuildHeartbeatMessage(TerminalID, VpsID,
                                            AccountInfoInteger(ACCOUNT_LOGIN),
                                            AccountInfoString(ACCOUNT_COMPANY),
-                                           0, "OK", "");
+                                           status_code, status_msg, "");
       if(g_pipe.Send(hbMsg))
          g_logger.Debug("Heartbeat sent");
       else

@@ -58,7 +58,12 @@ class HubService:
             if msg_type == "HEARTBEAT":
                 terminal_id = data.get("terminal_id", "")
                 ts_ms = data.get("ts_ms", int(time.time() * 1000))
-                await self.db.update_terminal_status(terminal_id, "Active", "OK")
+                status_code = data.get("payload", {}).get("status_code", 0)
+                status_msg = data.get("payload", {}).get("status_msg", "OK")
+                if status_code == 0:
+                    await self.db.update_terminal_status(terminal_id, "Active", "OK")
+                else:
+                    await self.db.update_terminal_status(terminal_id, "Error", status_msg)
                 await self.db.insert_heartbeat(
                     terminal_id, self.config.vps_id, ts_ms,
                     data.get("payload", {}).get("status_code", 0),
@@ -70,6 +75,10 @@ class HubService:
             # Trade messages — parse and route
             logger.info(f"Trade message received: type={msg_type} from {data.get('master_id', '?')}")
             msg = decode_master_message(raw)
+            await self.db.insert_message(
+                msg.msg_id, msg.master_id, str(msg.type),
+                json.dumps(msg.payload, separators=(',', ':')), msg.ts_ms,
+            )
             commands = await self.router.route(msg)
             logger.info(f"Router produced {len(commands)} command(s) for msg_id={msg.msg_id}")
 
@@ -110,11 +119,15 @@ class HubService:
             if msg_type == "HEARTBEAT":
                 terminal_id = data.get("terminal_id", "")
                 ts_ms = data.get("ts_ms", int(time.time() * 1000))
-                await self.db.update_terminal_status(terminal_id, "Active", "OK")
+                status_code = data.get("payload", {}).get("status_code", 0)
+                status_msg = data.get("payload", {}).get("status_msg", "OK")
+                if status_code == 0:
+                    await self.db.update_terminal_status(terminal_id, "Active", "OK")
+                else:
+                    await self.db.update_terminal_status(terminal_id, "Error", status_msg)
                 await self.db.insert_heartbeat(
                     terminal_id, self.config.vps_id, ts_ms,
-                    data.get("payload", {}).get("status_code", 0),
-                    data.get("payload", {}).get("status_msg", "OK"),
+                    status_code, status_msg,
                     data.get("payload", {}).get("last_error", ""),
                 )
                 return None
