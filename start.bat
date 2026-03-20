@@ -7,6 +7,15 @@ echo   Trade Copier - Starting all services...
 echo ============================================
 echo.
 
+:: Install frontend dependencies if needed
+if not exist "%~dp0web\frontend\node_modules" (
+    echo [0/3] Installing frontend dependencies...
+    pushd "%~dp0web\frontend"
+    call npm install
+    popd
+    echo.
+)
+
 :: Start Hub Service
 echo [1/3] Starting Hub Service...
 start "Hub Service" cmd /k "cd /d "%~dp0" && uv run python -m hub.main"
