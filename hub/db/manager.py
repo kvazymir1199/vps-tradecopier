@@ -18,6 +18,51 @@ class DatabaseManager:
         self._conn.row_factory = aiosqlite.Row
         schema = SCHEMA_PATH.read_text(encoding="utf-8")
         await self._conn.executescript(schema)
+        await self._run_migrations()
+
+    async def _run_migrations(self):
+        """Apply incremental migrations for existing databases."""
+        # Migration: add order_type column to trade_mappings (for pending orders support)
+        cursor = await self._conn.execute("PRAGMA table_info(trade_mappings)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "order_type" not in columns:
+            await self._conn.execute(
+                "ALTER TABLE trade_mappings ADD COLUMN order_type TEXT DEFAULT NULL"
+            )
+            await self._conn.commit()
+
+        # Migration: recreate messages table with updated CHECK constraint
+        # (adds PENDING_PLACE, PENDING_MODIFY, PENDING_DELETE types)
+        # Must disable FK checks to avoid constraint failures during table rename
+        cursor = await self._conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'"
+        )
+        row = await cursor.fetchone()
+        if row and "PENDING_PLACE" not in row[0]:
+            await self._conn.executescript("""
+                PRAGMA foreign_keys = OFF;
+                ALTER TABLE messages RENAME TO messages_old;
+                CREATE TABLE messages (
+                    msg_id   INTEGER NOT NULL,
+                    master_id TEXT   NOT NULL,
+                    type     TEXT    NOT NULL CHECK (type IN (
+                        'OPEN', 'MODIFY', 'CLOSE', 'CLOSE_PARTIAL',
+                        'PENDING_PLACE', 'PENDING_MODIFY', 'PENDING_DELETE',
+                        'HEARTBEAT', 'REGISTER'
+                    )),
+                    payload  TEXT    NOT NULL,
+                    ts_ms    INTEGER NOT NULL,
+                    status   TEXT    NOT NULL DEFAULT 'pending'
+                        CHECK (status IN ('pending', 'sent', 'acked', 'nacked', 'expired')),
+                    PRIMARY KEY (master_id, msg_id)
+                );
+                INSERT INTO messages SELECT * FROM messages_old;
+                DROP TABLE messages_old;
+                CREATE INDEX IF NOT EXISTS idx_msg_status ON messages(status);
+                CREATE INDEX IF NOT EXISTS idx_msg_ts ON messages(ts_ms);
+                CREATE INDEX IF NOT EXISTS idx_msg_type ON messages(type);
+                PRAGMA foreign_keys = ON;
+            """)
 
     async def close(self):
         if self._conn:

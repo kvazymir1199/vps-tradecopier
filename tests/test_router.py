@@ -91,3 +91,52 @@ async def test_route_duplicate_msg_id_skipped(router):
     commands2 = await router.route(msg)  # duplicate
     assert len(commands1) == 1
     assert len(commands2) == 0
+
+
+@pytest.mark.asyncio
+async def test_route_pending_place_message(router):
+    """PENDING_PLACE should route with volume mapping applied."""
+    msg = MasterMessage(
+        msg_id=2, master_id="master_1", type=MessageType.PENDING_PLACE, ts_ms=170,
+        payload={"ticket": 456, "symbol": "EURUSD", "order_type": "BUY_LIMIT",
+                 "volume": 0.1, "price": 1.080, "sl": 1.075, "tp": 1.090,
+                 "magic": 15010301, "comment": ""},
+    )
+    commands = await router.route(msg)
+    assert len(commands) == 1
+    cmd = commands[0]
+    assert cmd.type == MessageType.PENDING_PLACE
+    assert cmd.slave_id == "slave_1"
+    assert cmd.payload["order_type"] == "BUY_LIMIT"
+    assert cmd.payload["price"] == 1.080
+    assert cmd.payload["volume"] == 0.2  # multiplier 2.0
+    assert cmd.payload["magic"] == 15010305
+
+
+@pytest.mark.asyncio
+async def test_route_pending_modify_no_volume_override(router):
+    """PENDING_MODIFY should NOT override volume in payload."""
+    msg = MasterMessage(
+        msg_id=3, master_id="master_1", type=MessageType.PENDING_MODIFY, ts_ms=170,
+        payload={"ticket": 456, "magic": 15010301,
+                 "price": 1.082, "sl": 1.077, "tp": 1.092},
+    )
+    commands = await router.route(msg)
+    assert len(commands) == 1
+    cmd = commands[0]
+    assert cmd.type == MessageType.PENDING_MODIFY
+    assert "volume" not in cmd.payload or cmd.payload.get("volume") is None or cmd.payload.get("volume") == 0
+
+
+@pytest.mark.asyncio
+async def test_route_pending_delete_message(router):
+    """PENDING_DELETE should route correctly."""
+    msg = MasterMessage(
+        msg_id=4, master_id="master_1", type=MessageType.PENDING_DELETE, ts_ms=170,
+        payload={"ticket": 456, "magic": 15010301},
+    )
+    commands = await router.route(msg)
+    assert len(commands) == 1
+    cmd = commands[0]
+    assert cmd.type == MessageType.PENDING_DELETE
+    assert cmd.payload["magic"] == 15010305

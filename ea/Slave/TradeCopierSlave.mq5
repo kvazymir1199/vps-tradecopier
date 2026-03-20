@@ -205,6 +205,12 @@ void ProcessCommand(string raw)
       ExecuteClose(cmd);
    else if(cmd.type == "CLOSE_PARTIAL")
       ExecuteClosePartial(cmd);
+   else if(cmd.type == "PENDING_PLACE")
+      ExecutePendingPlace(cmd);
+   else if(cmd.type == "PENDING_MODIFY")
+      ExecutePendingModify(cmd);
+   else if(cmd.type == "PENDING_DELETE")
+      ExecutePendingDelete(cmd);
    else
    {
       g_logger.Error(StringFormat("Unknown command type: %s", cmd.type));
@@ -221,6 +227,15 @@ void ProcessCommand(string raw)
 //+------------------------------------------------------------------+
 void ExecuteOpen(SlaveCommandData &cmd)
 {
+   //--- If there's a pending order with this magic, delete it first (activation scenario)
+   ulong pendingTicket = FindOrderByMagic(cmd.magic);
+   if(pendingTicket != 0)
+   {
+      g_trade.OrderDelete(pendingTicket);
+      g_logger.Info(StringFormat("Deleted pending order %d (magic=%d) before market OPEN",
+                                 pendingTicket, cmd.magic));
+   }
+
    //--- Validate symbol
    if(!SymbolInfoInteger(cmd.symbol, SYMBOL_EXIST))
    {
@@ -514,6 +529,182 @@ void RecordProcessedMessage(string masterId, int msgId)
    else
    {
       g_logger.Error(StringFormat("Idempotency table full (max %d masters)", MAX_MASTERS));
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Find pending order by magic number                               |
+//+------------------------------------------------------------------+
+ulong FindOrderByMagic(long magic)
+{
+   int total = OrdersTotal();
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0) continue;
+      if((long)OrderGetInteger(ORDER_MAGIC) == magic)
+         return ticket;
+   }
+   return 0;
+}
+
+//+------------------------------------------------------------------+
+//| Convert string to ENUM_ORDER_TYPE                                |
+//+------------------------------------------------------------------+
+ENUM_ORDER_TYPE StringToOrderType(string type)
+{
+   if(type == "BUY_LIMIT")  return ORDER_TYPE_BUY_LIMIT;
+   if(type == "SELL_LIMIT") return ORDER_TYPE_SELL_LIMIT;
+   if(type == "BUY_STOP")   return ORDER_TYPE_BUY_STOP;
+   if(type == "SELL_STOP")  return ORDER_TYPE_SELL_STOP;
+   return ORDER_TYPE_BUY;
+}
+
+//+------------------------------------------------------------------+
+//| Execute PENDING_PLACE command                                    |
+//+------------------------------------------------------------------+
+void ExecutePendingPlace(SlaveCommandData &cmd)
+{
+   //--- Validate symbol
+   if(!SymbolInfoInteger(cmd.symbol, SYMBOL_EXIST))
+   {
+      g_logger.Error(StringFormat("Symbol not found: %s", cmd.symbol));
+      SendNack(cmd.msgId, "SYMBOL_NOT_FOUND");
+      return;
+   }
+
+   //--- Ensure symbol is in MarketWatch
+   SymbolSelect(cmd.symbol, true);
+
+   //--- Check if trading is enabled
+   if(!SymbolInfoInteger(cmd.symbol, SYMBOL_TRADE_MODE))
+   {
+      g_logger.Error(StringFormat("Trading disabled for %s", cmd.symbol));
+      SendNack(cmd.msgId, "TRADE_DISABLED");
+      return;
+   }
+
+   //--- Normalize volume
+   double volumeStep = SymbolInfoDouble(cmd.symbol, SYMBOL_VOLUME_STEP);
+   double volumeMin  = SymbolInfoDouble(cmd.symbol, SYMBOL_VOLUME_MIN);
+   double volumeMax  = SymbolInfoDouble(cmd.symbol, SYMBOL_VOLUME_MAX);
+
+   double normalizedVol = NormalizeVolume(cmd.volume, volumeStep);
+
+   if(normalizedVol < volumeMin)
+   {
+      g_logger.Error(StringFormat("Volume %.4f < min %.4f for %s",
+                                  normalizedVol, volumeMin, cmd.symbol));
+      SendNack(cmd.msgId, "INVALID_VOLUME");
+      return;
+   }
+
+   if(normalizedVol > volumeMax)
+   {
+      g_logger.Info(StringFormat("Volume %.4f capped to max %.4f for %s",
+                                 normalizedVol, volumeMax, cmd.symbol));
+      normalizedVol = volumeMax;
+   }
+
+   //--- Set magic for the trade
+   g_trade.SetExpertMagicNumber(cmd.magic);
+
+   //--- Determine order type
+   ENUM_ORDER_TYPE orderType = StringToOrderType(cmd.orderType);
+
+   //--- Comment
+   string comment = cmd.comment;
+   if(StringLen(comment) == 0)
+      comment = StringFormat("Copy:%s:%d", cmd.masterId, cmd.masterTicket);
+
+   //--- Execute pending order (limit_price=0.0 for non-STOP_LIMIT orders, price=cmd.price)
+   bool result = g_trade.OrderOpen(cmd.symbol, orderType, normalizedVol,
+                                    0.0, cmd.price, cmd.sl, cmd.tp,
+                                    ORDER_TIME_GTC, 0, comment);
+
+   if(result)
+   {
+      ulong orderTicket = g_trade.ResultOrder();
+      g_logger.Info(StringFormat("PENDING_PLACE success: sym=%s type=%s vol=%.2f price=%.5f ticket=%d",
+                                 cmd.symbol, cmd.orderType, normalizedVol, cmd.price, orderTicket));
+      SendAck(cmd.msgId, (long)orderTicket);
+   }
+   else
+   {
+      uint retcode = g_trade.ResultRetcode();
+      g_logger.Error(StringFormat("PENDING_PLACE failed: sym=%s type=%s retcode=%d comment=%s",
+                                  cmd.symbol, cmd.orderType, retcode, g_trade.ResultComment()));
+      SendNack(cmd.msgId, "ORDER_FAILED");
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Execute PENDING_MODIFY command                                   |
+//+------------------------------------------------------------------+
+void ExecutePendingModify(SlaveCommandData &cmd)
+{
+   ulong ticket = FindOrderByMagic(cmd.magic);
+   if(ticket == 0)
+   {
+      g_logger.Error(StringFormat("PENDING_MODIFY: no order with magic=%d", cmd.magic));
+      SendNack(cmd.msgId, "ORDER_NOT_FOUND");
+      return;
+   }
+
+   bool result = g_trade.OrderModify(ticket, cmd.price, cmd.sl, cmd.tp,
+                                      ORDER_TIME_GTC, 0);
+
+   if(result)
+   {
+      g_logger.Info(StringFormat("PENDING_MODIFY success: ticket=%d price=%.5f sl=%.5f tp=%.5f",
+                                 ticket, cmd.price, cmd.sl, cmd.tp));
+      SendAck(cmd.msgId, (long)ticket);
+   }
+   else
+   {
+      uint retcode = g_trade.ResultRetcode();
+      g_logger.Error(StringFormat("PENDING_MODIFY failed: ticket=%d retcode=%d comment=%s",
+                                  ticket, retcode, g_trade.ResultComment()));
+      SendNack(cmd.msgId, "ORDER_FAILED");
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Execute PENDING_DELETE command                                    |
+//+------------------------------------------------------------------+
+void ExecutePendingDelete(SlaveCommandData &cmd)
+{
+   ulong ticket = FindOrderByMagic(cmd.magic);
+   if(ticket == 0)
+   {
+      //--- Order not found — maybe already activated (became a position)
+      ulong posTicket = FindPositionByMagic(cmd.magic);
+      if(posTicket != 0)
+      {
+         g_logger.Info(StringFormat("PENDING_DELETE: order already activated as position %d (magic=%d)",
+                                    posTicket, cmd.magic));
+         SendAck(cmd.msgId, (long)posTicket);
+         return;
+      }
+
+      g_logger.Error(StringFormat("PENDING_DELETE: no order or position with magic=%d", cmd.magic));
+      SendNack(cmd.msgId, "ORDER_NOT_FOUND");
+      return;
+   }
+
+   bool result = g_trade.OrderDelete(ticket);
+
+   if(result)
+   {
+      g_logger.Info(StringFormat("PENDING_DELETE success: ticket=%d magic=%d", ticket, cmd.magic));
+      SendAck(cmd.msgId, (long)ticket);
+   }
+   else
+   {
+      uint retcode = g_trade.ResultRetcode();
+      g_logger.Error(StringFormat("PENDING_DELETE failed: ticket=%d retcode=%d comment=%s",
+                                  ticket, retcode, g_trade.ResultComment()));
+      SendNack(cmd.msgId, "ORDER_FAILED");
    }
 }
 //+------------------------------------------------------------------+

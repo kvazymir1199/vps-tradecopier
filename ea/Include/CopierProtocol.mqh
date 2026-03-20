@@ -204,6 +204,7 @@ struct SlaveCommandData
    long     masterTicket;
    string   symbol;
    string   direction;
+   string   orderType;    // "BUY_LIMIT", "SELL_LIMIT", "BUY_STOP", "SELL_STOP"
    double   volume;
    double   price;
    double   sl;
@@ -220,6 +221,7 @@ struct SlaveCommandData
       masterTicket = 0;
       symbol       = "";
       direction    = "";
+      orderType    = "";
       volume       = 0.0;
       price        = 0.0;
       sl           = 0.0;
@@ -354,6 +356,7 @@ bool ParseSlaveCommand(const string &json, SlaveCommandData &data)
 
    data.symbol    = _JsonExtractStr(json, "symbol");
    data.direction = _JsonExtractStr(json, "direction");
+   data.orderType = _JsonExtractStr(json, "order_type");
 
    string sVolume = _JsonExtractNum(json, "volume");
    if(sVolume != "")
@@ -378,6 +381,69 @@ bool ParseSlaveCommand(const string &json, SlaveCommandData &data)
    data.comment = _JsonExtractStr(json, "comment");
 
    return true;
+}
+
+//+------------------------------------------------------------------+
+//| Pending order message builders                                   |
+//+------------------------------------------------------------------+
+
+string BuildPendingPlaceMessage(int msgId, string masterId, long ticket,
+                                string symbol, string orderType, double volume,
+                                double price, double sl, double tp,
+                                long magic, string comment)
+{
+   string json = "{";
+   json += JsonInt("msg_id", msgId)          + ",";
+   json += JsonStr("master_id", masterId)    + ",";
+   json += JsonStr("type", "PENDING_PLACE")  + ",";
+   json += JsonInt("ts_ms", GetTimestampMs())+ ",";
+   json += "\"payload\":{";
+   json += JsonInt("ticket", ticket)         + ",";
+   json += JsonStr("symbol", symbol)         + ",";
+   json += JsonStr("order_type", orderType)  + ",";
+   json += JsonNum("volume", volume)         + ",";
+   json += JsonNum("price", price)           + ",";
+   json += JsonNum("sl", sl)                 + ",";
+   json += JsonNum("tp", tp)                 + ",";
+   json += JsonInt("magic", magic)           + ",";
+   json += JsonStr("comment", comment);
+   json += "}}";
+   return json;
+}
+
+//+------------------------------------------------------------------+
+string BuildPendingModifyMessage(int msgId, string masterId, long ticket,
+                                 long magic, double price, double sl, double tp)
+{
+   string json = "{";
+   json += JsonInt("msg_id", msgId)            + ",";
+   json += JsonStr("master_id", masterId)      + ",";
+   json += JsonStr("type", "PENDING_MODIFY")   + ",";
+   json += JsonInt("ts_ms", GetTimestampMs())  + ",";
+   json += "\"payload\":{";
+   json += JsonInt("ticket", ticket)           + ",";
+   json += JsonInt("magic", magic)             + ",";
+   json += JsonNum("price", price)             + ",";
+   json += JsonNum("sl", sl)                   + ",";
+   json += JsonNum("tp", tp);
+   json += "}}";
+   return json;
+}
+
+//+------------------------------------------------------------------+
+string BuildPendingDeleteMessage(int msgId, string masterId, long ticket,
+                                 long magic)
+{
+   string json = "{";
+   json += JsonInt("msg_id", msgId)            + ",";
+   json += JsonStr("master_id", masterId)      + ",";
+   json += JsonStr("type", "PENDING_DELETE")   + ",";
+   json += JsonInt("ts_ms", GetTimestampMs())  + ",";
+   json += "\"payload\":{";
+   json += JsonInt("ticket", ticket)           + ",";
+   json += JsonInt("magic", magic);
+   json += "}}";
+   return json;
 }
 
 #endif // COPIER_PROTOCOL_MQH

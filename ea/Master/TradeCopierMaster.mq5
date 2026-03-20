@@ -38,6 +38,21 @@ struct TrackedPosition
 };
 
 //+------------------------------------------------------------------+
+//| Tracked pending order state                                      |
+//+------------------------------------------------------------------+
+struct TrackedOrder
+{
+   long   ticket;
+   long   magic;
+   string symbol;
+   string orderType;   // "BUY_LIMIT", "SELL_LIMIT", "BUY_STOP", "SELL_STOP"
+   double volume;
+   double price;       // activation price
+   double sl;
+   double tp;
+};
+
+//+------------------------------------------------------------------+
 //| Global variables                                                 |
 //+------------------------------------------------------------------+
 CCopierLogger  g_logger;
@@ -45,6 +60,9 @@ CCopierPipe    g_pipe;
 
 TrackedPosition g_positions[];
 int             g_posCount;
+
+TrackedOrder    g_orders[];
+int             g_orderCount;
 
 int             g_msgId;
 datetime        g_lastHeartbeat;
@@ -85,6 +103,10 @@ int OnInit()
    g_posCount = 0;
    ArrayResize(g_positions, 0);
 
+   //--- Initialize tracked pending orders array
+   g_orderCount = 0;
+   ArrayResize(g_orders, 0);
+
    //--- Register in shared SQLite DB so Hub discovers us
    if(!RegisterTerminalInDB(g_terminalId, "master", g_dbFile))
       g_logger.Error("DB registration failed — Hub won't auto-create pipe");
@@ -111,12 +133,14 @@ int OnInit()
 
    //--- Do initial scan so we have baseline
    ScanPositions();
+   ScanOrders();
 
    //--- Start 100ms timer
    g_lastHeartbeat = TimeLocal();
    EventSetMillisecondTimer(100);
 
-   g_logger.Info(StringFormat("Init complete. Tracking %d positions", g_posCount));
+   g_logger.Info(StringFormat("Init complete. Tracking %d positions, %d pending orders",
+                              g_posCount, g_orderCount));
    return INIT_SUCCEEDED;
 }
 
@@ -136,6 +160,7 @@ void OnDeinit(const int reason)
 void OnTrade()
 {
    ScanPositions();
+   ScanOrders();
 }
 
 //+------------------------------------------------------------------+
@@ -360,5 +385,198 @@ bool CompareDouble(double a, double b)
 void PersistMsgId()
 {
    GlobalVariableSet(GV_MSG_ID_KEY, (double)g_msgId);
+}
+
+//+------------------------------------------------------------------+
+//| Convert ENUM_ORDER_TYPE to string                                |
+//+------------------------------------------------------------------+
+string OrderTypeToString(ENUM_ORDER_TYPE type)
+{
+   switch(type)
+   {
+      case ORDER_TYPE_BUY_LIMIT:  return "BUY_LIMIT";
+      case ORDER_TYPE_SELL_LIMIT: return "SELL_LIMIT";
+      case ORDER_TYPE_BUY_STOP:   return "BUY_STOP";
+      case ORDER_TYPE_SELL_STOP:  return "SELL_STOP";
+      default:                    return "";
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Check if an order type is a pending order                        |
+//+------------------------------------------------------------------+
+bool IsPendingOrderType(ENUM_ORDER_TYPE type)
+{
+   return (type == ORDER_TYPE_BUY_LIMIT  ||
+           type == ORDER_TYPE_SELL_LIMIT ||
+           type == ORDER_TYPE_BUY_STOP   ||
+           type == ORDER_TYPE_SELL_STOP);
+}
+
+//+------------------------------------------------------------------+
+//| Find a tracked pending order by ticket                           |
+//+------------------------------------------------------------------+
+int FindTrackedOrderByTicket(long ticket)
+{
+   for(int i = 0; i < g_orderCount; i++)
+   {
+      if(g_orders[i].ticket == ticket)
+         return i;
+   }
+   return -1;
+}
+
+//+------------------------------------------------------------------+
+//| Check if a position exists with the given magic                  |
+//+------------------------------------------------------------------+
+bool PositionExistsWithMagic(long magic)
+{
+   int total = PositionsTotal();
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if((long)PositionGetInteger(POSITION_MAGIC) == magic)
+         return true;
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| ScanOrders — compare current pending orders vs tracked, emit msgs|
+//+------------------------------------------------------------------+
+void ScanOrders()
+{
+   //--- Build snapshot of current pending orders matching magic pattern
+   int totalOrders = OrdersTotal();
+   TrackedOrder current[];
+   int curCount = 0;
+   ArrayResize(current, totalOrders);
+
+   for(int i = 0; i < totalOrders; i++)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0)
+         continue;
+
+      ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+      if(!IsPendingOrderType(type))
+         continue;
+
+      long magic = (long)OrderGetInteger(ORDER_MAGIC);
+      if(InpMagicMin != 0 || InpMagicMax != 0)
+      {
+         if(magic < InpMagicMin || magic >= InpMagicMax)
+            continue;
+      }
+
+      TrackedOrder ord;
+      ord.ticket    = (long)ticket;
+      ord.magic     = magic;
+      ord.symbol    = OrderGetString(ORDER_SYMBOL);
+      ord.orderType = OrderTypeToString(type);
+      ord.volume    = OrderGetDouble(ORDER_VOLUME_CURRENT);
+      ord.price     = OrderGetDouble(ORDER_PRICE_OPEN);
+      ord.sl        = OrderGetDouble(ORDER_SL);
+      ord.tp        = OrderGetDouble(ORDER_TP);
+
+      current[curCount] = ord;
+      curCount++;
+   }
+   ArrayResize(current, curCount);
+
+   //--- Detect NEW pending orders (in current but not in tracked)
+   for(int c = 0; c < curCount; c++)
+   {
+      int idx = FindTrackedOrderByTicket(current[c].ticket);
+      if(idx < 0)
+      {
+         //--- New pending order
+         g_msgId++;
+         string msg = BuildPendingPlaceMessage(g_msgId, g_terminalId,
+                                                current[c].ticket,
+                                                current[c].symbol,
+                                                current[c].orderType,
+                                                current[c].volume,
+                                                current[c].price,
+                                                current[c].sl,
+                                                current[c].tp,
+                                                current[c].magic,
+                                                "");
+         if(g_pipe.Send(msg))
+            g_logger.Info(StringFormat("PENDING_PLACE sent: ticket=%d type=%s magic=%d sym=%s price=%.5f vol=%.2f",
+                                       current[c].ticket, current[c].orderType, current[c].magic,
+                                       current[c].symbol, current[c].price, current[c].volume));
+         else
+            g_logger.Error(StringFormat("PENDING_PLACE send failed: ticket=%d", current[c].ticket));
+
+         PersistMsgId();
+      }
+      else
+      {
+         //--- Existing order — check for modifications (price, SL, TP)
+         TrackedOrder prev = g_orders[idx];
+
+         if(CompareDouble(prev.price, current[c].price) == false ||
+            CompareDouble(prev.sl, current[c].sl) == false ||
+            CompareDouble(prev.tp, current[c].tp) == false)
+         {
+            g_msgId++;
+            string msg = BuildPendingModifyMessage(g_msgId, g_terminalId,
+                                                    current[c].ticket,
+                                                    current[c].magic,
+                                                    current[c].price,
+                                                    current[c].sl,
+                                                    current[c].tp);
+            if(g_pipe.Send(msg))
+               g_logger.Info(StringFormat("PENDING_MODIFY sent: ticket=%d price=%.5f sl=%.5f tp=%.5f",
+                                          current[c].ticket, current[c].price, current[c].sl, current[c].tp));
+            else
+               g_logger.Error(StringFormat("PENDING_MODIFY send failed: ticket=%d", current[c].ticket));
+
+            PersistMsgId();
+         }
+      }
+   }
+
+   //--- Detect DELETED/ACTIVATED pending orders (in tracked but not in current)
+   for(int t = 0; t < g_orderCount; t++)
+   {
+      bool found = false;
+      for(int c = 0; c < curCount; c++)
+      {
+         if(g_orders[t].ticket == current[c].ticket)
+         {
+            found = true;
+            break;
+         }
+      }
+
+      if(!found)
+      {
+         //--- Order disappeared — could be deleted or activated
+         //--- In both cases, send PENDING_DELETE to slave
+         //--- (if activated, ScanPositions already sent OPEN)
+         g_msgId++;
+         string msg = BuildPendingDeleteMessage(g_msgId, g_terminalId,
+                                                 g_orders[t].ticket,
+                                                 g_orders[t].magic);
+
+         string reason = PositionExistsWithMagic(g_orders[t].magic) ? "activated" : "deleted";
+         if(g_pipe.Send(msg))
+            g_logger.Info(StringFormat("PENDING_DELETE sent: ticket=%d magic=%d (%s)",
+                                       g_orders[t].ticket, g_orders[t].magic, reason));
+         else
+            g_logger.Error(StringFormat("PENDING_DELETE send failed: ticket=%d", g_orders[t].ticket));
+
+         PersistMsgId();
+      }
+   }
+
+   //--- Update tracked array with current snapshot
+   g_orderCount = curCount;
+   ArrayResize(g_orders, curCount);
+   for(int i = 0; i < curCount; i++)
+      g_orders[i] = current[i];
 }
 //+------------------------------------------------------------------+

@@ -77,8 +77,9 @@ CREATE TABLE IF NOT EXISTS trade_mappings (
     symbol          TEXT    NOT NULL,
     master_volume   REAL    NOT NULL,
     slave_volume    REAL    NOT NULL,
+    order_type      TEXT    DEFAULT NULL,
     status          TEXT    NOT NULL DEFAULT 'pending'
-                           CHECK (status IN ('pending', 'open', 'partial_closed', 'closed', 'failed')),
+                           CHECK (status IN ('pending', 'pending_order', 'open', 'partial_closed', 'closed', 'failed')),
     created_at      INTEGER NOT NULL,
     closed_at       INTEGER,
 
@@ -96,6 +97,7 @@ CREATE TABLE IF NOT EXISTS messages (
     master_id       TEXT    NOT NULL,
     type            TEXT    NOT NULL CHECK (type IN (
                         'OPEN', 'MODIFY', 'CLOSE', 'CLOSE_PARTIAL',
+                        'PENDING_PLACE', 'PENDING_MODIFY', 'PENDING_DELETE',
                         'HEARTBEAT', 'REGISTER'
                     )),
     payload         TEXT    NOT NULL,

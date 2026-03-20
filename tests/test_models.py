@@ -45,3 +45,25 @@ def test_nack_message():
     )
     assert nack.reason == "SYMBOL_NOT_FOUND"
     assert nack.slave_ticket is None
+
+
+def test_message_type_pending_values():
+    assert MessageType.PENDING_PLACE == "PENDING_PLACE"
+    assert MessageType.PENDING_MODIFY == "PENDING_MODIFY"
+    assert MessageType.PENDING_DELETE == "PENDING_DELETE"
+
+
+def test_master_message_pending_place():
+    msg = MasterMessage(
+        msg_id=10,
+        master_id="master_1",
+        type=MessageType.PENDING_PLACE,
+        ts_ms=1700000000000,
+        payload={
+            "ticket": 456, "symbol": "EURUSD", "order_type": "BUY_LIMIT",
+            "volume": 0.1, "price": 1.080, "sl": 1.075, "tp": 1.090,
+            "magic": 15010301, "comment": "",
+        },
+    )
+    assert msg.type == MessageType.PENDING_PLACE
+    assert msg.payload["order_type"] == "BUY_LIMIT"

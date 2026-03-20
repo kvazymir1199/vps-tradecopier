@@ -72,8 +72,11 @@ class Router:
         payload["master_ticket"] = payload.pop("ticket", None)
         payload["symbol"] = slave_symbol
         payload["magic"] = slave_magic
-        payload["volume"] = slave_volume
         payload["comment"] = f"Copy:{msg.master_id}:{payload.get('master_ticket', '')}"
+
+        # Apply volume mapping only for types that carry volume
+        if msg.type in (MessageType.OPEN, MessageType.CLOSE_PARTIAL, MessageType.PENDING_PLACE):
+            payload["volume"] = slave_volume
 
         return SlaveCommand(
             msg_id=msg.msg_id,
