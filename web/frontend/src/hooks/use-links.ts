@@ -18,12 +18,12 @@ export function useLinks() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const createLink = async (body: { master_id: string; slave_id: string; lot_mode: string; lot_value: number; symbol_suffix: string }) => {
+  const createLink = async (body: { master_id: string; slave_id: string; lot_mode: string; lot_value: number }) => {
     await fetchApi<Link>("/links", { method: "POST", body: JSON.stringify(body) });
     await refresh();
   };
 
-  const updateLink = async (id: number, body: Partial<{ enabled: number; lot_mode: string; lot_value: number; symbol_suffix: string }>) => {
+  const updateLink = async (id: number, body: Partial<{ enabled: number; lot_mode: string; lot_value: number }>) => {
     await fetchApi<Link>(`/links/${id}`, { method: "PUT", body: JSON.stringify(body) });
     await refresh();
   };

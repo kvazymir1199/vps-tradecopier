@@ -120,11 +120,11 @@ async def test_get_active_links_for_master(db):
     await db.register_terminal("slave_1", "slave", 222, "B2")
     await db.register_terminal("slave_2", "slave", 333, "B3")
     await db.execute(
-        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, symbol_suffix, created_at) VALUES (?, ?, 1, 'multiplier', 2.0, '.s', ?)",
+        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, created_at) VALUES (?, ?, 1, 'multiplier', 2.0, ?)",
         ("master_1", "slave_1", 1700000000000),
     )
     await db.execute(
-        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, symbol_suffix, created_at) VALUES (?, ?, 0, 'fixed', 0.05, '.f', ?)",
+        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, created_at) VALUES (?, ?, 0, 'fixed', 0.05, ?)",
         ("master_1", "slave_2", 1700000000000),
     )
     links = await db.get_active_links("master_1")

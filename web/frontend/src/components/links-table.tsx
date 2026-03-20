@@ -47,7 +47,6 @@ export function LinksTable({ onSelectLink }: LinksTableProps) {
     slave_id: string;
     lot_mode: string;
     lot_value: number;
-    symbol_suffix: string;
   }) => {
     try {
       await createLink(data);
@@ -60,7 +59,7 @@ export function LinksTable({ onSelectLink }: LinksTableProps) {
 
   const handleEdit = async (
     id: number,
-    data: { lot_mode: string; lot_value: number; symbol_suffix: string }
+    data: { lot_mode: string; lot_value: number }
   ) => {
     try {
       await updateLink(id, data);
@@ -113,7 +112,6 @@ export function LinksTable({ onSelectLink }: LinksTableProps) {
             <TableHead>Slave</TableHead>
             <TableHead>Lot Mode</TableHead>
             <TableHead>Lot Value</TableHead>
-            <TableHead>Suffix</TableHead>
             <TableHead>Enabled</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
@@ -121,7 +119,7 @@ export function LinksTable({ onSelectLink }: LinksTableProps) {
         <TableBody>
           {links.length === 0 && !loading ? (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-muted-foreground">
+              <TableCell colSpan={6} className="text-center text-muted-foreground">
                 No links configured
               </TableCell>
             </TableRow>
@@ -140,7 +138,6 @@ export function LinksTable({ onSelectLink }: LinksTableProps) {
                 </TableCell>
                 <TableCell className="capitalize">{link.lot_mode}</TableCell>
                 <TableCell>{link.lot_value}</TableCell>
-                <TableCell>{link.symbol_suffix || "-"}</TableCell>
                 <TableCell>
                   <Switch
                     checked={link.enabled === 1}

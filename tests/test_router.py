@@ -11,8 +11,8 @@ async def router():
     await db.register_terminal("master_1", "master", 111, "B1")
     await db.register_terminal("slave_1", "slave", 222, "B2")
     await db.execute(
-        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, symbol_suffix, created_at) "
-        "VALUES ('master_1', 'slave_1', 1, 'multiplier', 2.0, '.s', 0)"
+        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, created_at) "
+        "VALUES ('master_1', 'slave_1', 1, 'multiplier', 2.0, 0)"
     )
     await db.execute(
         "INSERT INTO magic_mappings (link_id, master_setup_id, slave_setup_id) VALUES (1, 1, 5)"
@@ -34,7 +34,7 @@ async def test_route_open_message(router):
     assert len(commands) == 1
     cmd = commands[0]
     assert cmd.slave_id == "slave_1"
-    assert cmd.payload["symbol"] == "EURUSD.s"
+    assert cmd.payload["symbol"] == "EURUSD"
     assert cmd.payload["volume"] == 0.2
     assert cmd.payload["magic"] == 15010305
 

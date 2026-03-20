@@ -53,9 +53,7 @@ class Router:
     async def _build_slave_command(self, msg: MasterMessage, link: dict) -> SlaveCommand | None:
         # Resolve symbol
         explicit_mappings = await self._db.get_symbol_mappings(link["id"])
-        slave_symbol = resolve_symbol(
-            msg.payload.get("symbol", ""), link["symbol_suffix"], explicit_mappings
-        )
+        slave_symbol = resolve_symbol(msg.payload.get("symbol", ""), explicit_mappings)
 
         # Resolve magic
         master_magic = msg.payload.get("magic", 0)

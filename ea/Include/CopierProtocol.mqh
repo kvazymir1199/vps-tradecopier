@@ -61,6 +61,22 @@ long GetTimestampMs()
 }
 
 //+------------------------------------------------------------------+
+//| Build JSON array of MarketWatch symbols                          |
+//+------------------------------------------------------------------+
+string BuildSymbolsArray()
+{
+   string result = "";
+   int total = SymbolsTotal(true);  // true = only MarketWatch
+   for(int i = 0; i < total; i++)
+   {
+      string sym = SymbolName(i, true);
+      if(i > 0) result += ",";
+      result += "\"" + sym + "\"";
+   }
+   return result;
+}
+
+//+------------------------------------------------------------------+
 //| Message builders                                                 |
 //+------------------------------------------------------------------+
 
@@ -154,7 +170,8 @@ string BuildHeartbeatMessage(string terminalId, string vpsId,
    json += "\"payload\":{";
    json += JsonInt("status_code", statusCode)    + ",";
    json += JsonStr("status_msg", statusMsg)      + ",";
-   json += JsonStr("last_error", lastError);
+   json += JsonStr("last_error", lastError)      + ",";
+   json += "\"symbols\":[" + BuildSymbolsArray() + "]";
    json += "}}";
    return json;
 }
@@ -169,7 +186,8 @@ string BuildRegisterMessage(string terminalId, string role,
    json += JsonStr("terminal_id", terminalId)   + ",";
    json += JsonStr("role", role)                 + ",";
    json += JsonInt("account", account)           + ",";
-   json += JsonStr("broker", broker);
+   json += JsonStr("broker", broker)             + ",";
+   json += "\"symbols\":[" + BuildSymbolsArray() + "]";
    json += "}";
    return json;
 }

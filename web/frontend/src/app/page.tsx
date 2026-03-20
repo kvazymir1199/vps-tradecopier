@@ -10,10 +10,15 @@ export default function Home() {
 
   return (
     <main className="container mx-auto py-8 space-y-8 px-4">
-      <h1 className="text-2xl font-bold">Trade Copier — Terminal Management</h1>
       <TerminalsTable />
       <LinksTable onSelectLink={setSelectedLinkId} />
-      {selectedLinkId && <MappingsPanel linkId={selectedLinkId} />}
+      {selectedLinkId && (
+        <MappingsPanel
+          linkId={selectedLinkId}
+          open={true}
+          onOpenChange={(open) => { if (!open) setSelectedLinkId(null); }}
+        />
+      )}
       <Toaster />
     </main>
   );

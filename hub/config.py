@@ -1,6 +1,12 @@
-import json
+import os
 from dataclasses import dataclass
-from pathlib import Path
+
+# Фиксированный путь к БД — всегда в MQL5 Common Files
+DB_PATH = os.path.join(
+    os.environ.get("APPDATA", ""),
+    "MetaQuotes", "Terminal", "Common", "Files",
+    "TradeCopier", "copier.db",
+)
 
 
 @dataclass
@@ -23,20 +29,19 @@ class Config:
     telegram: TelegramConfig
 
     @classmethod
-    def load(cls, path: str | Path) -> "Config":
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    def from_db(cls, data: dict[str, str]) -> "Config":
         return cls(
-            db_path=data["db_path"],
-            vps_id=data["vps_id"],
-            heartbeat_interval_sec=data.get("heartbeat_interval_sec", 10),
-            heartbeat_timeout_sec=data.get("heartbeat_timeout_sec", 30),
-            ack_timeout_sec=data.get("ack_timeout_sec", 5),
-            ack_max_retries=data.get("ack_max_retries", 3),
-            resend_window_size=data.get("resend_window_size", 200),
-            alert_dedup_minutes=data.get("alert_dedup_minutes", 5),
+            db_path=DB_PATH,
+            vps_id=data.get("vps_id", "vps_1"),
+            heartbeat_interval_sec=int(data.get("heartbeat_interval_sec", "10")),
+            heartbeat_timeout_sec=int(data.get("heartbeat_timeout_sec", "30")),
+            ack_timeout_sec=int(data.get("ack_timeout_sec", "5")),
+            ack_max_retries=int(data.get("ack_max_retries", "3")),
+            resend_window_size=int(data.get("resend_window_size", "200")),
+            alert_dedup_minutes=int(data.get("alert_dedup_minutes", "5")),
             telegram=TelegramConfig(
-                enabled=data.get("telegram", {}).get("enabled", False),
-                bot_token=data.get("telegram", {}).get("bot_token", ""),
-                chat_id=data.get("telegram", {}).get("chat_id", ""),
+                enabled=data.get("telegram_enabled", "false").lower() == "true",
+                bot_token=data.get("telegram_bot_token", ""),
+                chat_id=data.get("telegram_chat_id", ""),
             ),
         )

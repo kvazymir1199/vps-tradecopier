@@ -3,10 +3,9 @@ import concurrent.futures
 import json
 import logging
 import os
-import sys
 import time
 
-from hub.config import Config
+from hub.config import Config, DB_PATH
 from hub.db.manager import DatabaseManager
 from hub.router.router import Router
 from hub.transport.pipe_server import PipeServer
@@ -29,14 +28,16 @@ logger = logging.getLogger("hub")
 
 
 class HubService:
-    def __init__(self, config_path: str):
-        self.config = Config.load(config_path)
-        self.db = DatabaseManager(self.config.db_path)
-        self.router = Router(self.db, self.config.resend_window_size)
-        self.alert_sender = AlertSender(self.db, self.config)
-        self.health_checker = HealthChecker(self.db, self.config.heartbeat_timeout_sec)
+    def __init__(self):
+        self.db = DatabaseManager(DB_PATH)
+        self.config: Config | None = None
+        self.router: Router | None = None
+        self.alert_sender: AlertSender | None = None
+        self.health_checker: HealthChecker | None = None
         self._pipe_servers: list[PipeServer] = []
         self._slave_cmd_pipes: dict[str, PipeServer] = {}
+        self._known_masters: set[str] = set()
+        self._known_slaves: set[str] = set()
 
     async def _handle_master_message(self, raw: str) -> str | None:
         """Process a raw JSON message from a master EA."""
@@ -51,6 +52,10 @@ class HubService:
                 broker = data.get("broker", "")
                 role = data.get("role", "master").lower()
                 await self.db.register_terminal(terminal_id, role, account, broker)
+                symbols = data.get("symbols", [])
+                if symbols:
+                    await self.db.save_terminal_symbols(terminal_id, symbols)
+                    logger.info(f"Saved {len(symbols)} symbols for {terminal_id}")
                 logger.info(f"REGISTER: {terminal_id} ({role}) account={account}")
                 return None
 
@@ -70,6 +75,9 @@ class HubService:
                     data.get("payload", {}).get("status_msg", "OK"),
                     data.get("payload", {}).get("last_error", ""),
                 )
+                symbols = data.get("payload", {}).get("symbols", [])
+                if symbols:
+                    await self.db.save_terminal_symbols(terminal_id, symbols)
                 return None
 
             # Trade messages — parse and route
@@ -113,6 +121,10 @@ class HubService:
                 account = data.get("account", 0)
                 broker = data.get("broker", "")
                 await self.db.register_terminal(terminal_id, "slave", account, broker)
+                symbols = data.get("symbols", [])
+                if symbols:
+                    await self.db.save_terminal_symbols(terminal_id, symbols)
+                    logger.info(f"Saved {len(symbols)} symbols for {terminal_id}")
                 logger.info(f"REGISTER: {terminal_id} (slave) account={account}")
                 return None
 
@@ -130,53 +142,44 @@ class HubService:
                     status_code, status_msg,
                     data.get("payload", {}).get("last_error", ""),
                 )
+                symbols = data.get("payload", {}).get("symbols", [])
+                if symbols:
+                    await self.db.save_terminal_symbols(terminal_id, symbols)
                 return None
 
             # ACK/NACK message
             ack = decode_ack(raw)
             logger.info(f"ACK from {ack.slave_id}: type={ack.ack_type} msg_id={ack.msg_id}")
-            await self.db.insert_ack(
-                ack.msg_id, "", ack.slave_id,
-                ack.ack_type, ack.reason, ack.slave_ticket,
-                ack.ts_ms,
-            )
+            # Look up master_id from messages table for FK constraint
+            master_id = await self.db.get_master_id_for_msg(ack.msg_id)
+            if master_id:
+                await self.db.insert_ack(
+                    ack.msg_id, master_id, ack.slave_id,
+                    ack.ack_type, ack.reason, ack.slave_ticket,
+                    ack.ts_ms,
+                )
+            else:
+                logger.warning(f"ACK msg_id={ack.msg_id} has no matching message, skipping")
 
         except Exception as e:
             logger.error(f"Error handling slave message: {e} — raw: {raw[:200]}")
         return None
 
-    async def start(self):
-        # Ensure enough threads for blocking pipe I/O + writes
-        loop = asyncio.get_event_loop()
-        loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=32))
-
-        await self.db.initialize()
-
-        # Discover active links to know which pipes to create
-        links = await self.db.get_active_links()
-
-        # Collect unique master and slave IDs
-        master_ids: set[str] = set()
-        slave_ids: set[str] = set()
-        for link in links:
-            master_ids.add(link["master_id"])
-            slave_ids.add(link["slave_id"])
-
-        # Defaults so EA can connect even without links configured
-        if not master_ids:
-            master_ids.add("master_1")
-        if not slave_ids:
-            slave_ids.add("slave_1")
-
-        # Create master pipes (one per master)
+    def _create_pipes(self, master_ids: set[str], slave_ids: set[str]):
+        """Create and start PipeServers for new terminal IDs."""
         for mid in master_ids:
+            if mid in self._known_masters:
+                continue
             pipe_name = f"copier_{mid}"
             ps = PipeServer(pipe_name, self._handle_master_message)
             self._pipe_servers.append(ps)
-            logger.info(f"Master pipe: \\\\.\\pipe\\{pipe_name}")
+            self._known_masters.add(mid)
+            asyncio.create_task(ps.start())
+            logger.info(f"Master pipe created: \\\\.\\pipe\\{pipe_name}")
 
-        # Create slave pipes (cmd + ack per slave)
         for sid in slave_ids:
+            if sid in self._known_slaves:
+                continue
             cmd_name = f"copier_{sid}_cmd"
             ack_name = f"copier_{sid}_ack"
 
@@ -186,19 +189,72 @@ class HubService:
             self._slave_cmd_pipes[sid] = cmd_ps
             self._pipe_servers.append(cmd_ps)
             self._pipe_servers.append(ack_ps)
-            logger.info(f"Slave pipes: \\\\.\\pipe\\{cmd_name}, \\\\.\\pipe\\{ack_name}")
+            self._known_slaves.add(sid)
+            asyncio.create_task(cmd_ps.start())
+            asyncio.create_task(ack_ps.start())
+            logger.info(f"Slave pipes created: \\\\.\\pipe\\{cmd_name}, \\\\.\\pipe\\{ack_name}")
 
-        # Start all pipe servers as background tasks
-        for ps in self._pipe_servers:
-            asyncio.create_task(ps.start())
+    async def start(self):
+        # Ensure enough threads for blocking pipe I/O + writes
+        loop = asyncio.get_event_loop()
+        loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=32))
+
+        await self.db.initialize()
+
+        # Загрузить конфиг из БД (seed defaults при первом запуске)
+        await self.db.seed_config_defaults()
+        config_data = await self.db.get_config()
+        self.config = Config.from_db(config_data)
+
+        self.router = Router(self.db, self.config.resend_window_size)
+        self.alert_sender = AlertSender(self.db, self.config)
+        self.health_checker = HealthChecker(self.db, self.config.heartbeat_timeout_sec)
+
+        # Collect terminal IDs from links AND registered terminals
+        links = await self.db.get_active_links()
+        terminals = await self.db.get_all_terminals()
+
+        master_ids: set[str] = set()
+        slave_ids: set[str] = set()
+        for link in links:
+            master_ids.add(link["master_id"])
+            slave_ids.add(link["slave_id"])
+        for t in terminals:
+            if t["role"] == "master":
+                master_ids.add(t["terminal_id"])
+            elif t["role"] == "slave":
+                slave_ids.add(t["terminal_id"])
+
+        # Create pipes only for terminals that exist in DB
+        self._create_pipes(master_ids, slave_ids)
 
         logger.info(f"Hub Service started — {len(self._pipe_servers)} pipes listening")
         asyncio.create_task(self._health_loop())
+        asyncio.create_task(self._terminal_discovery_loop())
         await self._run_forever()
 
     @staticmethod
     async def _noop_handler(raw: str) -> str | None:
         return None
+
+    async def _terminal_discovery_loop(self):
+        """Periodically check DB for newly registered terminals and create pipes."""
+        while True:
+            try:
+                terminals = await self.db.get_all_terminals()
+                new_masters: set[str] = set()
+                new_slaves: set[str] = set()
+                for t in terminals:
+                    tid = t["terminal_id"]
+                    if t["role"] == "master" and tid not in self._known_masters:
+                        new_masters.add(tid)
+                    elif t["role"] == "slave" and tid not in self._known_slaves:
+                        new_slaves.add(tid)
+                if new_masters or new_slaves:
+                    self._create_pipes(new_masters, new_slaves)
+            except Exception as e:
+                logger.error(f"Terminal discovery error: {e}")
+            await asyncio.sleep(2)
 
     async def _health_loop(self):
         while True:
@@ -216,8 +272,7 @@ class HubService:
 
 
 def main():
-    config_path = sys.argv[1] if len(sys.argv) > 1 else "config/config.json"
-    hub = HubService(config_path)
+    hub = HubService()
     asyncio.run(hub.start())
 
 

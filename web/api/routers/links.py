@@ -65,10 +65,9 @@ async def create_link(body: LinkCreate):
         now = int(time.time())
         cursor = await db.execute(
             """INSERT INTO master_slave_links
-               (master_id, slave_id, lot_mode, lot_value, symbol_suffix, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (body.master_id, body.slave_id, body.lot_mode, body.lot_value,
-             body.symbol_suffix, now),
+               (master_id, slave_id, lot_mode, lot_value, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (body.master_id, body.slave_id, body.lot_mode, body.lot_value, now),
         )
         await db.commit()
         link_id = cursor.lastrowid

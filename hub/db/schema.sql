@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS master_slave_links (
     lot_mode        TEXT    NOT NULL DEFAULT 'multiplier'
                            CHECK (lot_mode IN ('multiplier', 'fixed')),
     lot_value       REAL    NOT NULL DEFAULT 1.0,
-    symbol_suffix   TEXT    DEFAULT '',
     created_at      INTEGER NOT NULL,
 
     UNIQUE(master_id, slave_id)
@@ -157,3 +156,16 @@ CREATE TABLE IF NOT EXISTS alerts_history (
 CREATE INDEX IF NOT EXISTS idx_alert_type ON alerts_history(alert_type);
 CREATE INDEX IF NOT EXISTS idx_alert_terminal ON alerts_history(terminal_id);
 CREATE INDEX IF NOT EXISTS idx_alert_sent ON alerts_history(sent_at);
+
+-- === Terminal Symbols (from MarketWatch) ===
+CREATE TABLE IF NOT EXISTS terminal_symbols (
+    terminal_id TEXT NOT NULL REFERENCES terminals(terminal_id) ON DELETE CASCADE,
+    symbol      TEXT NOT NULL,
+    PRIMARY KEY (terminal_id, symbol)
+);
+
+-- === Config (key-value settings) ===
+CREATE TABLE IF NOT EXISTS config (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+);

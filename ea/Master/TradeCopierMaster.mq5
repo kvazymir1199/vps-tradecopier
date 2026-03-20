@@ -10,13 +10,11 @@
 #include "..\Include\CopierLogger.mqh"
 #include "..\Include\CopierPipe.mqh"
 #include "..\Include\CopierProtocol.mqh"
+#include "..\Include\CopierDatabase.mqh"
 
 //+------------------------------------------------------------------+
 //| Input parameters                                                 |
 //+------------------------------------------------------------------+
-input string TerminalID   = "master_1";
-input string VpsID        = "vps_1";
-input string PipeName     = "copier_master_1";
 input int    HeartbeatSec = 10;
 
 //+------------------------------------------------------------------+
@@ -53,18 +51,29 @@ datetime        g_lastHeartbeat;
 
 string          GV_MSG_ID_KEY;   // GlobalVariable name for msg_id persistence
 
+// Auto-generated from account number
+string g_terminalId;
+string g_pipeName;
+string g_dbFile = "TradeCopier\\copier.db";
+string g_vpsId  = "vps_1";
+
 //+------------------------------------------------------------------+
 //| OnInit                                                           |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   g_logger.Init("Master_" + TerminalID);
+   //--- Auto-generate terminal ID and pipe name from account number
+   long account = AccountInfoInteger(ACCOUNT_LOGIN);
+   g_terminalId = "master_" + IntegerToString(account);
+   g_pipeName   = "copier_master_" + IntegerToString(account);
+
+   g_logger.Init("Master_" + g_terminalId);
    g_logger.Info("=== TradeCopierMaster initializing ===");
-   g_logger.Info(StringFormat("TerminalID=%s  VpsID=%s  Pipe=%s  HB=%ds",
-                              TerminalID, VpsID, PipeName, HeartbeatSec));
+   g_logger.Info(StringFormat("TerminalID=%s  Pipe=%s  HB=%ds",
+                              g_terminalId, g_pipeName, HeartbeatSec));
 
    //--- Restore msg_id from GlobalVariable for persistence
-   GV_MSG_ID_KEY = "CopierMaster_MsgId_" + TerminalID;
+   GV_MSG_ID_KEY = "CopierMaster_MsgId_" + g_terminalId;
    if(GlobalVariableCheck(GV_MSG_ID_KEY))
       g_msgId = (int)GlobalVariableGet(GV_MSG_ID_KEY);
    else
@@ -76,16 +85,20 @@ int OnInit()
    g_posCount = 0;
    ArrayResize(g_positions, 0);
 
-   //--- Connect pipe
-   if(!g_pipe.Connect(PipeName))
+   //--- Register in shared SQLite DB so Hub discovers us
+   if(!RegisterTerminalInDB(g_terminalId, "master", g_dbFile))
+      g_logger.Error("DB registration failed — Hub won't auto-create pipe");
+
+   //--- Connect pipe (silent — Hub may not have created it yet)
+   if(!g_pipe.Connect(g_pipeName, true))
    {
-      g_logger.Error("Initial pipe connection failed; will retry on timer");
+      g_logger.Info("Waiting for Hub to create pipe...");
    }
    else
    {
       //--- Send REGISTER
       g_msgId++;
-      string regMsg = BuildRegisterMessage(TerminalID, "MASTER",
+      string regMsg = BuildRegisterMessage(g_terminalId, "MASTER",
                                            AccountInfoInteger(ACCOUNT_LOGIN),
                                            AccountInfoString(ACCOUNT_COMPANY));
       if(g_pipe.Send(regMsg))
@@ -133,12 +146,12 @@ void OnTimer()
    //--- Ensure pipe is connected
    if(!g_pipe.IsConnected())
    {
-      if(!g_pipe.Connect(PipeName))
+      if(!g_pipe.Connect(g_pipeName, true))
          return;
 
       //--- Re-register after reconnect
       g_msgId++;
-      string regMsg = BuildRegisterMessage(TerminalID, "MASTER",
+      string regMsg = BuildRegisterMessage(g_terminalId, "MASTER",
                                            AccountInfoInteger(ACCOUNT_LOGIN),
                                            AccountInfoString(ACCOUNT_COMPANY));
       g_pipe.Send(regMsg);
@@ -161,7 +174,7 @@ void OnTimer()
       int status_code = broker_connected ? 0 : 1;
       string status_msg = broker_connected ? "OK" : "No broker connection";
 
-      string hbMsg = BuildHeartbeatMessage(TerminalID, VpsID,
+      string hbMsg = BuildHeartbeatMessage(g_terminalId, g_vpsId,
                                            AccountInfoInteger(ACCOUNT_LOGIN),
                                            AccountInfoString(ACCOUNT_COMPANY),
                                            status_code, status_msg, "");
@@ -220,7 +233,7 @@ void ScanPositions()
       {
          //--- New position
          g_msgId++;
-         string msg = BuildOpenMessage(g_msgId, TerminalID,
+         string msg = BuildOpenMessage(g_msgId, g_terminalId,
                                        current[c].ticket,
                                        current[c].symbol,
                                        current[c].direction,
@@ -250,7 +263,7 @@ void ScanPositions()
             CompareDouble(prev.tp, current[c].tp) == false)
          {
             g_msgId++;
-            string msg = BuildModifyMessage(g_msgId, TerminalID,
+            string msg = BuildModifyMessage(g_msgId, g_terminalId,
                                             current[c].ticket,
                                             current[c].magic,
                                             current[c].sl,
@@ -269,7 +282,7 @@ void ScanPositions()
          {
             double closedVolume = prev.volume - current[c].volume;
             g_msgId++;
-            string msg = BuildClosePartialMessage(g_msgId, TerminalID,
+            string msg = BuildClosePartialMessage(g_msgId, g_terminalId,
                                                   current[c].ticket,
                                                   current[c].magic,
                                                   closedVolume);
@@ -300,7 +313,7 @@ void ScanPositions()
       if(!found)
       {
          g_msgId++;
-         string msg = BuildCloseMessage(g_msgId, TerminalID,
+         string msg = BuildCloseMessage(g_msgId, g_terminalId,
                                         g_positions[t].ticket,
                                         g_positions[t].magic);
          if(g_pipe.Send(msg))

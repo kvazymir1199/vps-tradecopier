@@ -10,15 +10,12 @@
 #include "..\Include\CopierLogger.mqh"
 #include "..\Include\CopierPipe.mqh"
 #include "..\Include\CopierProtocol.mqh"
+#include "..\Include\CopierDatabase.mqh"
 #include <Trade\Trade.mqh>
 
 //+------------------------------------------------------------------+
 //| Input parameters                                                 |
 //+------------------------------------------------------------------+
-input string TerminalID    = "slave_1";
-input string VpsID         = "vps_1";
-input string CmdPipeName   = "copier_slave_1_cmd";
-input string AckPipeName   = "copier_slave_1_ack";
 input int    HeartbeatSec  = 10;
 input int    MaxSlippage   = 10;
 
@@ -46,15 +43,28 @@ int                g_idempotencyCount;
 
 datetime           g_lastHeartbeat;
 
+// Auto-generated from account number
+string g_terminalId;
+string g_cmdPipeName;
+string g_ackPipeName;
+string g_dbFile = "TradeCopier\\copier.db";
+string g_vpsId  = "vps_1";
+
 //+------------------------------------------------------------------+
 //| OnInit                                                           |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   g_logger.Init("Slave_" + TerminalID);
+   //--- Auto-generate terminal ID and pipe names from account number
+   long account = AccountInfoInteger(ACCOUNT_LOGIN);
+   g_terminalId  = "slave_" + IntegerToString(account);
+   g_cmdPipeName = "copier_slave_" + IntegerToString(account) + "_cmd";
+   g_ackPipeName = "copier_slave_" + IntegerToString(account) + "_ack";
+
+   g_logger.Init("Slave_" + g_terminalId);
    g_logger.Info("=== TradeCopierSlave initializing ===");
-   g_logger.Info(StringFormat("TerminalID=%s  VpsID=%s  CmdPipe=%s  AckPipe=%s  HB=%ds  Slip=%d",
-                              TerminalID, VpsID, CmdPipeName, AckPipeName,
+   g_logger.Info(StringFormat("TerminalID=%s  CmdPipe=%s  AckPipe=%s  HB=%ds  Slip=%d",
+                              g_terminalId, g_cmdPipeName, g_ackPipeName,
                               HeartbeatSec, MaxSlippage));
 
    //--- Configure CTrade
@@ -66,19 +76,21 @@ int OnInit()
    g_idempotencyCount = 0;
    ArrayResize(g_idempotency, MAX_MASTERS);
 
-   //--- Connect pipes
-   bool cmdOk = g_cmdPipe.Connect(CmdPipeName);
-   bool ackOk = g_ackPipe.Connect(AckPipeName);
+   //--- Register in shared SQLite DB so Hub discovers us
+   if(!RegisterTerminalInDB(g_terminalId, "slave", g_dbFile))
+      g_logger.Error("DB registration failed — Hub won't auto-create pipe");
 
-   if(!cmdOk)
-      g_logger.Error("Cmd pipe connection failed; will retry on timer");
-   if(!ackOk)
-      g_logger.Error("Ack pipe connection failed; will retry on timer");
+   //--- Connect pipes (silent — Hub may not have created them yet)
+   bool cmdOk = g_cmdPipe.Connect(g_cmdPipeName, true);
+   bool ackOk = g_ackPipe.Connect(g_ackPipeName, true);
+
+   if(!cmdOk || !ackOk)
+      g_logger.Info("Waiting for Hub to create pipes...");
 
    //--- Send REGISTER via ack pipe
    if(ackOk)
    {
-      string regMsg = BuildRegisterMessage(TerminalID, "SLAVE",
+      string regMsg = BuildRegisterMessage(g_terminalId, "SLAVE",
                                            AccountInfoInteger(ACCOUNT_LOGIN),
                                            AccountInfoString(ACCOUNT_COMPANY));
       if(g_ackPipe.Send(regMsg))
@@ -111,21 +123,21 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTimer()
 {
-   //--- Ensure pipes are connected
+   //--- Ensure pipes are connected (silent retries, log only on success)
    if(!g_cmdPipe.IsConnected())
    {
-      if(!g_cmdPipe.Connect(CmdPipeName))
+      if(!g_cmdPipe.Connect(g_cmdPipeName, true))
          return;
-      g_logger.Info("Cmd pipe reconnected");
+      g_logger.Info("Cmd pipe connected");
    }
 
    if(!g_ackPipe.IsConnected())
    {
-      if(!g_ackPipe.Connect(AckPipeName))
+      if(!g_ackPipe.Connect(g_ackPipeName, true))
          return;
 
       //--- Re-register after reconnect
-      string regMsg = BuildRegisterMessage(TerminalID, "SLAVE",
+      string regMsg = BuildRegisterMessage(g_terminalId, "SLAVE",
                                            AccountInfoInteger(ACCOUNT_LOGIN),
                                            AccountInfoString(ACCOUNT_COMPANY));
       g_ackPipe.Send(regMsg);
@@ -148,7 +160,7 @@ void OnTimer()
       int status_code = broker_connected ? 0 : 1;
       string status_msg = broker_connected ? "OK" : "No broker connection";
 
-      string hbMsg = BuildHeartbeatMessage(TerminalID, VpsID,
+      string hbMsg = BuildHeartbeatMessage(g_terminalId, g_vpsId,
                                            AccountInfoInteger(ACCOUNT_LOGIN),
                                            AccountInfoString(ACCOUNT_COMPANY),
                                            status_code, status_msg, "");
@@ -437,7 +449,7 @@ void SendAck(int msgId, long slaveTicket)
 {
    string json = "{" +
       JsonInt("msg_id", msgId) + "," +
-      JsonStr("slave_id", TerminalID) + "," +
+      JsonStr("slave_id", g_terminalId) + "," +
       JsonStr("ack_type", "ACK") + "," +
       JsonInt("slave_ticket", slaveTicket) + "," +
       JsonInt("ts_ms", GetTimestampMs()) +
@@ -454,7 +466,7 @@ void SendNack(int msgId, string reason)
 {
    string json = "{" +
       JsonInt("msg_id", msgId) + "," +
-      JsonStr("slave_id", TerminalID) + "," +
+      JsonStr("slave_id", g_terminalId) + "," +
       JsonStr("ack_type", "NACK") + "," +
       JsonStr("reason", reason) + "," +
       JsonInt("ts_ms", GetTimestampMs()) +

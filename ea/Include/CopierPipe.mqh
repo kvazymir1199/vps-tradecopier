@@ -43,7 +43,7 @@ public:
             CCopierPipe();
            ~CCopierPipe();
 
-   bool     Connect(string pipeName);
+   bool     Connect(string pipeName, bool silent = false);
    void     Disconnect();
    bool     IsConnected();
    bool     Send(string message);
@@ -75,7 +75,7 @@ string CCopierPipe::BuildPipePath(string pipeName)
 }
 
 //+------------------------------------------------------------------+
-bool CCopierPipe::Connect(string pipeName)
+bool CCopierPipe::Connect(string pipeName, bool silent)
 {
    if(m_handle != COPIER_PIPE_INVALID_HANDLE)
    {
@@ -114,7 +114,8 @@ bool CCopierPipe::Connect(string pipeName)
 
       if(m_handle == COPIER_PIPE_INVALID_HANDLE)
       {
-         PrintFormat("[CopierPipe] Connect failed to %s — Win32 error %u", fullPath, err);
+         if(!silent)
+            PrintFormat("[CopierPipe] Connect failed to %s — Win32 error %u", fullPath, err);
          return false;
       }
    }

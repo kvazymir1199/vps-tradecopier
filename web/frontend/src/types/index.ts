@@ -15,7 +15,6 @@ export interface Link {
   enabled: number;
   lot_mode: "multiplier" | "fixed";
   lot_value: number;
-  symbol_suffix: string;
   created_at: number;
 }
 
@@ -31,4 +30,30 @@ export interface MagicMapping {
   link_id: number;
   master_setup_id: number;
   slave_setup_id: number;
+}
+
+export interface SymbolSuggestion {
+  master_symbol: string;
+  slave_symbol: string | null;
+  status: "mapped" | "auto" | "unmapped";
+}
+
+export interface SymbolSuggestionsResponse {
+  master_id: string;
+  slave_id: string;
+  suggestions: SymbolSuggestion[];
+  slave_symbols: string[];
+}
+
+export interface Config {
+  vps_id: string;
+  heartbeat_interval_sec: number;
+  heartbeat_timeout_sec: number;
+  ack_timeout_sec: number;
+  ack_max_retries: number;
+  resend_window_size: number;
+  alert_dedup_minutes: number;
+  telegram_enabled: boolean;
+  telegram_bot_token: string;
+  telegram_chat_id: string;
 }

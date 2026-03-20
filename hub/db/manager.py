@@ -12,6 +12,8 @@ class DatabaseManager:
         self._conn: aiosqlite.Connection | None = None
 
     async def initialize(self):
+        # Ensure parent directory exists (e.g. Common\Files\TradeCopier\)
+        Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = await aiosqlite.connect(self._db_path)
         self._conn.row_factory = aiosqlite.Row
         schema = SCHEMA_PATH.read_text(encoding="utf-8")
@@ -47,9 +49,12 @@ class DatabaseManager:
     ):
         now = self._now_ms()
         await self._conn.execute(
-            "INSERT OR IGNORE INTO terminals "
+            "INSERT INTO terminals "
             "(terminal_id, role, account_number, broker_server, status, created_at, last_heartbeat) "
-            "VALUES (?, ?, ?, ?, 'Starting', ?, ?)",
+            "VALUES (?, ?, ?, ?, 'Starting', ?, ?) "
+            "ON CONFLICT(terminal_id) DO UPDATE SET "
+            "account_number = excluded.account_number, "
+            "broker_server = excluded.broker_server",
             (terminal_id, role, account_number, broker_server, now, now),
         )
         await self._conn.commit()
@@ -81,6 +86,13 @@ class DatabaseManager:
             (status, msg_id, master_id),
         )
         await self._conn.commit()
+
+    async def get_master_id_for_msg(self, msg_id: int) -> str | None:
+        cursor = await self._conn.execute(
+            "SELECT master_id FROM messages WHERE msg_id = ?", (msg_id,)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else None
 
     async def insert_ack(
         self,
@@ -144,6 +156,9 @@ class DatabaseManager:
         )
         await self._conn.commit()
 
+    async def get_all_terminals(self) -> list[dict]:
+        return await self.fetch_all("SELECT * FROM terminals")
+
     async def get_active_links(self, master_id: str | None = None) -> list[dict]:
         if master_id:
             return await self.fetch_all(
@@ -203,4 +218,67 @@ class DatabaseManager:
         await self._conn.execute(
             "DELETE FROM messages WHERE ts_ms < ?", (cutoff,)
         )
+        await self._conn.commit()
+
+    # ── Config (key-value настройки) ──────────────────────────────
+
+    async def get_config(self) -> dict[str, str]:
+        rows = await self.fetch_all("SELECT key, value FROM config")
+        return {r["key"]: r["value"] for r in rows}
+
+    async def set_config(self, key: str, value: str):
+        await self._conn.execute(
+            "INSERT INTO config (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+        await self._conn.commit()
+
+    async def set_config_bulk(self, items: dict[str, str]):
+        for key, value in items.items():
+            await self._conn.execute(
+                "INSERT INTO config (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+        await self._conn.commit()
+
+    async def save_terminal_symbols(self, terminal_id: str, symbols: list[str]):
+        """Replace terminal's symbol list (full sync from MarketWatch)."""
+        await self._conn.execute(
+            "DELETE FROM terminal_symbols WHERE terminal_id = ?", (terminal_id,)
+        )
+        for sym in symbols:
+            await self._conn.execute(
+                "INSERT INTO terminal_symbols (terminal_id, symbol) VALUES (?, ?)",
+                (terminal_id, sym),
+            )
+        await self._conn.commit()
+
+    async def get_terminal_symbols(self, terminal_id: str) -> list[str]:
+        rows = await self.fetch_all(
+            "SELECT symbol FROM terminal_symbols WHERE terminal_id = ? ORDER BY symbol",
+            (terminal_id,),
+        )
+        return [r["symbol"] for r in rows]
+
+    async def seed_config_defaults(self):
+        """Вставить значения конфига по умолчанию, если они ещё не заданы."""
+        defaults = {
+            "vps_id": "vps_1",
+            "heartbeat_interval_sec": "10",
+            "heartbeat_timeout_sec": "30",
+            "ack_timeout_sec": "5",
+            "ack_max_retries": "3",
+            "resend_window_size": "200",
+            "alert_dedup_minutes": "5",
+            "telegram_enabled": "false",
+            "telegram_bot_token": "",
+            "telegram_chat_id": "",
+        }
+        for key, value in defaults.items():
+            await self._conn.execute(
+                "INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)",
+                (key, value),
+            )
         await self._conn.commit()

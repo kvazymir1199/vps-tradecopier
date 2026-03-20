@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-import tempfile
 from pathlib import Path
 
 import aiosqlite
@@ -11,7 +10,7 @@ import pytest
 import httpx
 from httpx import ASGITransport
 
-from web.api.database import set_db_path
+import web.api.database as database
 from web.api.main import create_app
 
 SCHEMA = (Path(__file__).resolve().parent.parent / "hub" / "db" / "schema.sql").read_text()
@@ -34,7 +33,7 @@ async def client(tmp_path):
         )
         await db.commit()
 
-    set_db_path(db_path)
+    database.DB_PATH = db_path
     app = create_app()
 
     transport = ASGITransport(app=app)

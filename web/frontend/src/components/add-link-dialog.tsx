@@ -27,7 +27,6 @@ interface AddLinkDialogProps {
     slave_id: string;
     lot_mode: string;
     lot_value: number;
-    symbol_suffix: string;
   }) => Promise<void>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -43,7 +42,6 @@ export function AddLinkDialog({
   const [slaveId, setSlaveId] = useState("");
   const [lotMode, setLotMode] = useState("multiplier");
   const [lotValue, setLotValue] = useState("1");
-  const [symbolSuffix, setSymbolSuffix] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const masters = terminals.filter((t) => t.role === "master");
@@ -57,13 +55,11 @@ export function AddLinkDialog({
         slave_id: slaveId,
         lot_mode: lotMode,
         lot_value: parseFloat(lotValue),
-        symbol_suffix: symbolSuffix,
       });
       setMasterId("");
       setSlaveId("");
       setLotMode("multiplier");
       setLotValue("1");
-      setSymbolSuffix("");
       onOpenChange(false);
     } finally {
       setSubmitting(false);
@@ -89,7 +85,7 @@ export function AddLinkDialog({
               <SelectContent>
                 {masters.map((t) => (
                   <SelectItem key={t.terminal_id} value={t.terminal_id}>
-                    {t.terminal_id} ({t.account_number ?? "N/A"})
+                    {t.terminal_id}{t.broker_server ? ` — ${t.broker_server}` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -104,7 +100,7 @@ export function AddLinkDialog({
               <SelectContent>
                 {slaves.map((t) => (
                   <SelectItem key={t.terminal_id} value={t.terminal_id}>
-                    {t.terminal_id} ({t.account_number ?? "N/A"})
+                    {t.terminal_id}{t.broker_server ? ` — ${t.broker_server}` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -130,15 +126,6 @@ export function AddLinkDialog({
               min="0"
               value={lotValue}
               onChange={(e) => setLotValue(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Symbol Suffix</label>
-            <Input
-              type="text"
-              placeholder="e.g. .raw"
-              value={symbolSuffix}
-              onChange={(e) => setSymbolSuffix(e.target.value)}
             />
           </div>
         </div>

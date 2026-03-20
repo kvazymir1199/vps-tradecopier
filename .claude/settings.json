@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(prlctl *)",
+      "Read(*)",
+      "Write(.claude/*)",
+      "Write(Include/*)",
+      "Write(docs/*)",
+      "Edit(*)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(sudo *)",
+      "Write(*.env)",
+      "Write(*credentials*)"
+    ]
+  },
+  "mcp_servers": {},
+  "project": {
+    "name": "Michael Spiropoulos Strategy",
+    "type": "mql5",
+    "broker": "Pepperstone",
+    "platform": "MetaTrader 5",
+    "environment": "Parallels (Windows VM)"
+  },
+  "compilation": {
+    "vm_name": "Windows 11",
+    "mt5_path": "C:\\Program Files\\Pepperstone MetaTrader 5\\metaeditor64.exe",
+    "mql5_path": "C:\\Users\\User\\AppData\\Roaming\\MetaQuotes\\Terminal\\<TERMINAL_ID>\\MQL5"
+  }
+}
