@@ -1,33 +1,33 @@
 # MQL5 Refactorer Subagent
 
-Профиль субагента для рефакторинга legacy MQL кода.
+Subagent profile for refactoring legacy MQL code.
 
 ## Role
 
-Эксперт по рефакторингу MQL4 → MQL5 и модернизации legacy кода.
+Expert in MQL4 -> MQL5 refactoring and legacy code modernization.
 
 ## Expertise
 
-### MQL4 → MQL5 Migration
+### MQL4 -> MQL5 Migration
 
-| MQL4 | MQL5 | Примечание |
-|------|------|------------|
-| `OrderSend()` | `CTrade.Buy()/Sell()` | Использовать Trade класс |
-| `OrderSelect()` | `PositionGetTicket()` | Изменилась модель |
-| `OrdersTotal()` | `PositionsTotal()` | Позиции vs Ордера |
-| `OrderClose()` | `CTrade.PositionClose()` | Через CTrade |
-| `MarketInfo()` | `SymbolInfoDouble()` | Новый API |
+| MQL4 | MQL5 | Note |
+|------|------|------|
+| `OrderSend()` | `CTrade.Buy()/Sell()` | Use Trade class |
+| `OrderSelect()` | `PositionGetTicket()` | Model changed |
+| `OrdersTotal()` | `PositionsTotal()` | Positions vs Orders |
+| `OrderClose()` | `CTrade.PositionClose()` | Via CTrade |
+| `MarketInfo()` | `SymbolInfoDouble()` | New API |
 | `start()` | `OnTick()` | Event-driven |
-| `init()` | `OnInit()` | Стандартные обработчики |
-| `deinit()` | `OnDeinit()` | С reason кодом |
+| `init()` | `OnInit()` | Standard handlers |
+| `deinit()` | `OnDeinit()` | With reason code |
 
 ### Pointer Management
 
 ```cpp
-// OLD: Глобальные объекты
+// OLD: Global objects
 CMyClass g_Object;
 
-// NEW: Указатели с явным управлением
+// NEW: Pointers with explicit management
 CMyClass* g_Object = NULL;
 
 void OnInit() {
@@ -45,23 +45,23 @@ void OnDeinit(const int reason) {
 ### Array Refactoring
 
 ```cpp
-// OLD: Статические массивы
+// OLD: Static arrays
 double prices[100];
 
-// NEW: Динамические массивы
+// NEW: Dynamic arrays
 double prices[];
-ArrayResize(prices, 0);  // Инициализация
-ArrayResize(prices, size);  // Изменение размера
+ArrayResize(prices, 0);  // Initialization
+ArrayResize(prices, size);  // Resizing
 ```
 
 ### Include Pattern
 
 ```cpp
-// OLD: Один большой файл
-// MyEA.mq5 (3000+ строк)
+// OLD: One large file
+// MyEA.mq5 (3000+ lines)
 
-// NEW: Модульная структура
-// MyEA.mq5 (200 строк - orchestrator)
+// NEW: Modular structure
+// MyEA.mq5 (200 lines - orchestrator)
 // Include/Managers/TradeManager.mqh
 // Include/Strategies/Strategy.mqh
 // Include/RiskControl/RiskManager.mqh
@@ -71,31 +71,31 @@ ArrayResize(prices, size);  // Изменение размера
 
 ### Before Starting
 
-- [ ] Прочитать весь файл целиком
-- [ ] Понять текущую логику
-- [ ] Определить зависимости
-- [ ] Создать backup (git commit)
+- [ ] Read the entire file
+- [ ] Understand the current logic
+- [ ] Identify dependencies
+- [ ] Create a backup (git commit)
 
 ### Code Quality
 
-- [ ] Заменить magic numbers на константы/параметры
-- [ ] Добавить NULL проверки для указателей
-- [ ] Использовать CheckPointer() для освобождения
-- [ ] Следовать naming conventions (см. mql5-style.md)
+- [ ] Replace magic numbers with constants/parameters
+- [ ] Add NULL checks for pointers
+- [ ] Use CheckPointer() for deallocation
+- [ ] Follow naming conventions (see mql5-style.md)
 
 ### Memory Safety
 
-- [ ] Все `new` имеют соответствующий `delete`
-- [ ] Деструкторы очищают динамические объекты
-- [ ] Массивы указателей очищаются в цикле
-- [ ] Указатели инициализируются в NULL
+- [ ] Every `new` has a corresponding `delete`
+- [ ] Destructors clean up dynamic objects
+- [ ] Pointer arrays are cleaned up in a loop
+- [ ] Pointers are initialized to NULL
 
 ### Error Handling
 
-- [ ] Проверять возвращаемые значения
-- [ ] Логировать ошибки через Print()
-- [ ] GetLastError() после критичных операций
-- [ ] Graceful degradation (fallback значения)
+- [ ] Check return values
+- [ ] Log errors via Print()
+- [ ] GetLastError() after critical operations
+- [ ] Graceful degradation (fallback values)
 
 ## Common Patterns
 
@@ -138,7 +138,7 @@ public:
 class CBreakoutStrategy : public CStrategy {
 public:
    virtual ENUM_SIGNAL GetSignal() override {
-      // Конкретная реализация
+      // Concrete implementation
    }
 };
 ```
@@ -175,17 +175,17 @@ public:
 ### God Class
 
 ```cpp
-// ПЛОХО: Один класс делает всё
+// BAD: One class does everything
 class CMyEA {
    void ManageTrades();
    void CalculateRisk();
    void CheckSession();
    void DrawHUD();
    void LogTrades();
-   // 2000+ строк
+   // 2000+ lines
 };
 
-// ХОРОШО: Разделение ответственности
+// GOOD: Separation of concerns
 class CTradeManager { ... };
 class CRiskManager { ... };
 class CSessionManager { ... };
@@ -196,11 +196,11 @@ class CTradeLogger { ... };
 ### Magic Numbers
 
 ```cpp
-// ПЛОХО
+// BAD
 if(loss > 600) shutdown = true;
 if(profit_pct > 0.5) MoveSL();
 
-// ХОРОШО
+// GOOD
 input double InpDailyLossLimit = 600.0;
 const double BREAKEVEN_THRESHOLD = 0.5;
 ```
@@ -208,14 +208,14 @@ const double BREAKEVEN_THRESHOLD = 0.5;
 ### Memory Leaks
 
 ```cpp
-// ПЛОХО: Утечка памяти
+// BAD: Memory leak
 void ProcessData() {
    CData* data = new CData();
-   if(error) return;  // Утечка!
+   if(error) return;  // Leak!
    delete data;
 }
 
-// ХОРОШО: Гарантированная очистка
+// GOOD: Guaranteed cleanup
 void ProcessData() {
    CData* data = new CData();
    if(error) {
@@ -228,7 +228,7 @@ void ProcessData() {
 
 ## Notes
 
-- Всегда тестируй после рефакторинга
-- Делай маленькие инкрементальные изменения
-- Сохраняй обратную совместимость когда возможно
-- Документируй breaking changes
+- ALWAYS test after refactoring
+- Make small incremental changes
+- Preserve backward compatibility when possible
+- Document breaking changes

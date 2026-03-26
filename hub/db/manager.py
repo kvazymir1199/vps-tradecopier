@@ -265,7 +265,7 @@ class DatabaseManager:
         )
         await self._conn.commit()
 
-    # ── Config (key-value настройки) ──────────────────────────────
+    # ── Config (key-value settings) ──────────────────────────────
 
     async def get_config(self) -> dict[str, str]:
         rows = await self.fetch_all("SELECT key, value FROM config")
@@ -308,7 +308,7 @@ class DatabaseManager:
         return [r["symbol"] for r in rows]
 
     async def seed_config_defaults(self):
-        """Вставить значения конфига по умолчанию, если они ещё не заданы."""
+        """Insert default config values if they are not already set."""
         defaults = {
             "vps_id": "vps_1",
             "heartbeat_interval_sec": "10",

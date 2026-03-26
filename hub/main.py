@@ -201,7 +201,7 @@ class HubService:
 
         await self.db.initialize()
 
-        # Загрузить конфиг из БД (seed defaults при первом запуске)
+        # Load config from DB (seed defaults on first launch)
         await self.db.seed_config_defaults()
         config_data = await self.db.get_config()
         self.config = Config.from_db(config_data)

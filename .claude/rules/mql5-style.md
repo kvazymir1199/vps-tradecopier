@@ -1,22 +1,22 @@
 # MQL5 Code Style Rules
 
-Правила оформления кода для проекта Michael Spiropoulos Strategy.
+Code style rules for the Michael Spiropoulos Strategy project.
 
 ## Naming Conventions
 
-### Классы
+### Classes
 
 ```cpp
-// Префикс C + PascalCase
+// Prefix C + PascalCase
 class CTradeManager { ... };
 class CSessionManager { ... };
 class CStrategyBreakout { ... };
 ```
 
-### Члены класса (приватные)
+### Class Members (private)
 
 ```cpp
-// Префикс m_ + snake_case
+// Prefix m_ + snake_case
 private:
    int      m_magic_number;
    string   m_symbol;
@@ -25,10 +25,10 @@ private:
    CSessionManager* m_session_manager;
 ```
 
-### Структуры
+### Structs
 
 ```cpp
-// Префикс S + PascalCase
+// Prefix S + PascalCase
 struct STradeEntry {
    ulong    ticket;
    double   entry_price;
@@ -42,10 +42,10 @@ struct SRiskState {
 };
 ```
 
-### Енумы
+### Enums
 
 ```cpp
-// Префикс ENUM_ + UPPER_CASE, значения в UPPER_CASE
+// Prefix ENUM_ + UPPER_CASE, values in UPPER_CASE
 enum ENUM_STRATEGY_SIGNAL {
    SIGNAL_NONE,
    SIGNAL_BUY,
@@ -60,26 +60,26 @@ enum ENUM_SESSION_STATE {
 };
 ```
 
-### Входные параметры
+### Input Parameters
 
 ```cpp
-// Префикс Inp + PascalCase
+// Prefix Inp + PascalCase
 input int    InpMagic = 112233;
 input double InpDailyLossLimit = 600.0;
 input bool   InpUseSpyFilter = true;
 input string InpSpySymbol = "SPY";
 ```
 
-### Глобальные объекты
+### Global Objects
 
 ```cpp
-// Префикс g_ + PascalCase
+// Prefix g_ + PascalCase
 CSessionManager* g_SessionManager;
 CTradeManager*   g_TradeManager;
 CRiskManager*    g_RiskManager;
 ```
 
-### Локальные переменные
+### Local Variables
 
 ```cpp
 // snake_case
@@ -90,7 +90,7 @@ void ProcessTrade() {
 }
 ```
 
-### Методы
+### Methods
 
 ```cpp
 // PascalCase
@@ -114,8 +114,8 @@ bool IsTradingAllowed(string symbol);
 #property strict
 
 //+------------------------------------------------------------------+
-//| Summary: Краткое описание модуля                                 |
-//|          Многострочное описание при необходимости                |
+//| Summary: Brief module description                                |
+//|          Multi-line description if needed                        |
 //+------------------------------------------------------------------+
 
 // === INCLUDES ===
@@ -131,14 +131,14 @@ struct SExample { ... };
 // === CLASS ===
 class CExample {
 private:
-   // Приватные члены
+   // Private members
 
 public:
-   // Конструктор/деструктор
+   // Constructor/destructor
    CExample();
    ~CExample();
 
-   // Публичные методы
+   // Public methods
    void Init(...);
    void OnTick();
 };
@@ -151,10 +151,10 @@ CExample::CExample() {
 
 ## Pointer Safety
 
-### Инициализация
+### Initialization
 
 ```cpp
-// ВСЕГДА инициализируй указатели в конструкторе
+// ALWAYS initialize pointers in the constructor
 CTradeManager::CTradeManager() {
    m_session_manager = NULL;
    m_spy_manager = NULL;
@@ -162,10 +162,10 @@ CTradeManager::CTradeManager() {
 }
 ```
 
-### Проверка перед использованием
+### Check Before Use
 
 ```cpp
-// ВСЕГДА проверяй NULL перед вызовом методов
+// ALWAYS check for NULL before calling methods
 void CTradeManager::OnTick() {
    if(m_session_manager != NULL) {
       if(m_session_manager.IsTradingAllowed(m_symbol)) {
@@ -175,10 +175,10 @@ void CTradeManager::OnTick() {
 }
 ```
 
-### Освобождение памяти
+### Memory Deallocation
 
 ```cpp
-// ВСЕГДА освобождай динамически созданные объекты
+// ALWAYS free dynamically created objects
 CTradeManager::~CTradeManager() {
    for(int i = 0; i < ArraySize(m_strategies); i++) {
       if(CheckPointer(m_strategies[i]) == POINTER_DYNAMIC) {
@@ -191,7 +191,7 @@ CTradeManager::~CTradeManager() {
 ### CheckPointer
 
 ```cpp
-// Используй CheckPointer для безопасной проверки
+// Use CheckPointer for safe validation
 if(CheckPointer(m_strategies[i]) == POINTER_DYNAMIC) {
    delete m_strategies[i];
    m_strategies[i] = NULL;
@@ -200,29 +200,29 @@ if(CheckPointer(m_strategies[i]) == POINTER_DYNAMIC) {
 
 ## Comments and Documentation
 
-### Doxygen для публичных методов
+### Doxygen for Public Methods
 
 ```cpp
 /**
- * Проверяет разрешение на торговлю
- * @param symbol Торговый инструмент
- * @param signal Сигнал стратегии (BUY/SELL)
- * @return true если все фильтры пройдены
+ * Checks permission to trade
+ * @param symbol Trading instrument
+ * @param signal Strategy signal (BUY/SELL)
+ * @return true if all filters passed
  */
 bool CheckTradeFilters(string symbol, ENUM_STRATEGY_SIGNAL signal);
 ```
 
-### Inline комментарии
+### Inline Comments
 
 ```cpp
-// Breakeven на 0.5%
+// Breakeven at 0.5%
 if(profit_pct >= 0.5 && current_sl < open_price) {
-   new_sl = open_price;  // Перемещаем SL в безубыток
+   new_sl = open_price;  // Move SL to breakeven
    should_modify = true;
 }
 ```
 
-### Секции
+### Sections
 
 ```cpp
 //+------------------------------------------------------------------+
@@ -245,16 +245,16 @@ void ExecuteTrade(...) {
 ### Defensive Programming
 
 ```cpp
-// Проверяй граничные условия
+// Check boundary conditions
 if(ArraySize(m_strategies) == 0) return;
 
-// Валидируй входные данные
+// Validate input data
 if(symbol == "" || symbol == NULL) {
    Print("[ERROR] Invalid symbol");
    return;
 }
 
-// Проверяй результаты операций
+// Check operation results
 if(!m_trade.Buy(volume, symbol, price, sl, 0, comment)) {
    Print("[ERROR] Buy failed: ", GetLastError());
 }
@@ -263,14 +263,14 @@ if(!m_trade.Buy(volume, symbol, price, sl, 0, comment)) {
 ### Explicit over Implicit
 
 ```cpp
-// ХОРОШО: явное указание
+// GOOD: explicit specification
 double price = SymbolInfoDouble(symbol, SYMBOL_ASK);
 if(order_type == ORDER_TYPE_BUY) {
    // ...
 }
 
-// ПЛОХО: неявное
-if(type) {  // Что такое type?
+// BAD: implicit
+if(type) {  // What is type?
    // ...
 }
 ```
@@ -278,26 +278,26 @@ if(type) {  // Что такое type?
 ### Magic Numbers
 
 ```cpp
-// ПЛОХО
+// BAD
 if(profit_pct >= 0.5) { ... }
 
-// ХОРОШО
+// GOOD
 const double BREAKEVEN_THRESHOLD = 0.5;  // 0.5%
 if(profit_pct >= BREAKEVEN_THRESHOLD) { ... }
 
-// ИЛИ через input параметры
+// OR via input parameters
 input double InpBreakevenThreshold = 0.5;
 ```
 
 ## Logging Standards
 
 ```cpp
-// Формат: [ModuleName] Message
+// Format: [ModuleName] Message
 Print("[SessionManager] Session started: ", session_name);
 Print("[RiskManager] Daily loss limit reached: ", loss);
 Print("[SpyManager] Long allowed: score=", score, "/3");
 
-// Уровни (неявные)
+// Levels (implicit)
 Print("[INFO] Normal operation");
 Print("[WARNING] Something unusual");
 Print("[ERROR] Something failed");

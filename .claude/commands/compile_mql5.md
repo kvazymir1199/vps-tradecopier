@@ -1,63 +1,63 @@
-# /compile - Компиляция MQL5
+# /compile - MQL5 Compilation
 
-Команда для компиляции MQL5 файлов через Pepperstone MetaTrader 5.
+Command for compiling MQL5 files via Pepperstone MetaTrader 5.
 
-## Использование
+## Usage
 
 ```
-/compile [файл]
+/compile [file]
 ```
 
-Если файл не указан, компилируется `Stage2.mq5`.
+If no file is specified, `Stage2.mq5` is compiled.
 
-## Как это работает
+## How It Works
 
-MetaTrader 5 работает через Parallels (Windows VM). Компиляция выполняется через `metaeditor64.exe`.
+MetaTrader 5 runs via Parallels (Windows VM). Compilation is performed through `metaeditor64.exe`.
 
-### Команда компиляции
+### Compilation Command
 
 ```bash
-# Через Parallels prlctl
-prlctl exec "Windows 11" "C:\Program Files\Pepperstone MetaTrader 5\metaeditor64.exe" /compile:"<путь_к_файлу>" /log:"compile.log"
+# Via Parallels prlctl
+prlctl exec "Windows 11" "C:\Program Files\Pepperstone MetaTrader 5\metaeditor64.exe" /compile:"<file_path>" /log:"compile.log"
 ```
 
-### Альтернатива: через общую папку
+### Alternative: Via Shared Folder
 
-Если файлы синхронизируются через Parallels Shared Folders:
+If files are synced through Parallels Shared Folders:
 
 ```bash
-# Windows путь к проекту
+# Windows path to the project
 C:\Users\User\MQL5_Dev\Experts\Michael Spiropoulos\Stage2.mq5
 
-# Или через Parallels mount
+# Or via Parallels mount
 \\Mac\Home\MQL5_Dev\Experts\Michael Spiropoulos\Stage2.mq5
 ```
 
-## Что делать
+## Steps
 
-1. **Проверь путь к MT5** — убедись что Pepperstone MT5 установлен
-2. **Запусти компиляцию** — используй команду выше
-3. **Проверь логи** — `compile.log` содержит ошибки и предупреждения
+1. **Check the MT5 path** -- make sure Pepperstone MT5 is installed
+2. **Run compilation** -- use the command above
+3. **Check logs** -- `compile.log` contains errors and warnings
 
-## Парсинг результатов
+## Parsing Results
 
-После компиляции проверь:
+After compilation, check:
 
-- **0 error(s)** — успешная компиляция
-- **X error(s)** — есть ошибки, нужно исправить
-- **X warning(s)** — предупреждения (можно игнорировать, но лучше исправить)
+- **0 error(s)** -- successful compilation
+- **X error(s)** -- there are errors that need to be fixed
+- **X warning(s)** -- warnings (can be ignored, but better to fix)
 
-## Типичные ошибки
+## Common Errors
 
-| Ошибка | Причина | Решение |
-|--------|---------|---------|
-| `'identifier' - undeclared identifier` | Не объявлена переменная/функция | Проверь include файлы |
-| `'=' - l-value required` | Попытка присвоить значение константе | Проверь const модификаторы |
-| `cannot open file` | Файл не найден | Проверь путь к include |
-| `struct has no members` | Пустая структура | Добавь хотя бы одно поле |
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `'identifier' - undeclared identifier` | Variable/function not declared | Check include files |
+| `'=' - l-value required` | Attempting to assign a value to a constant | Check const modifiers |
+| `cannot open file` | File not found | Check include path |
+| `struct has no members` | Empty struct | Add at least one field |
 
-## Примечания
+## Notes
 
-- Компиляция требует запущенной Windows VM в Parallels
-- MetaEditor должен быть закрыт во время компиляции через CLI
-- Результат сохраняется в `.ex5` файл рядом с исходником
+- Compilation requires a running Windows VM in Parallels
+- MetaEditor must be closed during CLI compilation
+- The result is saved as an `.ex5` file next to the source file

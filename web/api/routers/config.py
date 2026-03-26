@@ -20,7 +20,7 @@ async def get_config():
 @router.put("", response_model=ConfigOut)
 async def update_config(body: ConfigUpdate):
     updates = {k: str(v) for k, v in body.model_dump(exclude_none=True).items()}
-    # Преобразовать bool в строку для telegram_enabled
+    # Convert bool to string for telegram_enabled
     if "telegram_enabled" in updates:
         updates["telegram_enabled"] = str(body.telegram_enabled).lower()
     async with get_db() as db:

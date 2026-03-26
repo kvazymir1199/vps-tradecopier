@@ -1,48 +1,48 @@
 # Trade Copier
 
-Система копирования сделок между терминалами MetaTrader 5. Мастер-терминал открывает сделки, они автоматически копируются на один или несколько слейв-терминалов.
+A trade copying system between MetaTrader 5 terminals. The master terminal opens trades, and they are automatically copied to one or more slave terminals.
 
-## Архитектура
+## Architecture
 
 ```
 Master EA (MT5)  ──named pipe──>  Hub Service (Python)  ──named pipe──>  Slave EA (MT5)
-                   JSON msgs       центральный           SlaveCommands
-                                   маршрутизатор
+                   JSON msgs       central                SlaveCommands
+                                   router
                                         │
                                      SQLite DB
                                         │
                                    FastAPI ──> Next.js UI
 ```
 
-**Компоненты:**
-- **Hub Service** — центральный маршрутизатор сообщений (asyncio + Windows named pipes)
-- **Master EA** — MQL5 советник, отслеживает сделки и отправляет события в Hub
-- **Slave EA** — MQL5 советник, получает команды от Hub и исполняет через CTrade
-- **Web UI** — FastAPI backend + Next.js frontend для управления терминалами, связями и настройками
+**Components:**
+- **Hub Service** — central message router (asyncio + Windows named pipes)
+- **Master EA** — MQL5 Expert Advisor that monitors trades and sends events to Hub
+- **Slave EA** — MQL5 Expert Advisor that receives commands from Hub and executes them via CTrade
+- **Web UI** — FastAPI backend + Next.js frontend for managing terminals, links, and settings
 
-## Требования
+## Requirements
 
-- **ОС:** Windows 10/11 (named pipes — Windows-only механизм IPC)
-- **Python:** 3.11+ с пакетным менеджером [uv](https://docs.astral.sh/uv/)
-- **Node.js:** 18+ (для Next.js frontend)
-- **MetaTrader 5:** с доступом к MetaEditor для компиляции EA
+- **OS:** Windows 10/11 (named pipes — Windows-only IPC mechanism)
+- **Python:** 3.11+ with [uv](https://docs.astral.sh/uv/) package manager
+- **Node.js:** 18+ (for Next.js frontend)
+- **MetaTrader 5:** with access to MetaEditor for compiling EAs
 
-## Установка
+## Installation
 
-### 1. Клонировать репозиторий
+### 1. Clone the repository
 
 ```bash
 git clone <repo-url>
 cd Tino-V
 ```
 
-### 2. Установить Python-зависимости
+### 2. Install Python dependencies
 
 ```bash
 uv sync
 ```
 
-### 3. Установить frontend-зависимости
+### 3. Install frontend dependencies
 
 ```bash
 cd web/frontend
@@ -50,124 +50,124 @@ npm install
 cd ../..
 ```
 
-### 4. Скомпилировать EA
+### 4. Compile the EAs
 
-1. Скопировать содержимое папки `ea/` в каталог MQL5 вашего терминала MT5
-2. Открыть MetaEditor (F4 в терминале)
-3. Скомпилировать `TradeCopierMaster.mq5` и `TradeCopierSlave.mq5` (F7)
+1. Copy the contents of the `ea/` folder to the MQL5 directory of your MT5 terminal
+2. Open MetaEditor (F4 in the terminal)
+3. Compile `TradeCopierMaster.mq5` and `TradeCopierSlave.mq5` (F7)
 
-## Запуск
+## Running
 
-### Быстрый старт
+### Quick Start
 
 ```bash
 start.bat
 ```
 
-Запускает все 3 сервиса (Hub, FastAPI, Frontend) в отдельных окнах.
+Launches all 3 services (Hub, FastAPI, Frontend) in separate windows.
 
-### Ручной запуск
+### Manual Start
 
 ```bash
 # 1. Hub Service
 uv run python -m hub.main
 
-# 2. FastAPI Backend (в другом терминале)
+# 2. FastAPI Backend (in another terminal)
 uv run uvicorn web.api.main:app --host 0.0.0.0 --port 8000
 
-# 3. Frontend (в другом терминале)
+# 3. Frontend (in another terminal)
 cd web/frontend && npm run dev
 ```
 
-### Остановка
+### Stopping
 
 ```bash
 stop.bat
 ```
 
-## Настройка
+## Configuration
 
-### Настройка терминалов
+### Terminal Setup
 
-1. Открыть Web UI: http://localhost:3000
-2. В MT5 добавить Master EA на график мастер-терминала:
+1. Open Web UI: http://localhost:3000
+2. In MT5, attach Master EA to a chart on the master terminal:
    - `TerminalID` = `master_1`
    - `PipeName` = `copier_master_1`
-3. Добавить Slave EA на графики слейв-терминалов:
-   - `TerminalID` = `slave_1` (или `slave_2`, и т.д.)
+3. Attach Slave EA to charts on slave terminals:
+   - `TerminalID` = `slave_1` (or `slave_2`, etc.)
    - `CmdPipeName` = `copier_slave_1_cmd`
    - `AckPipeName` = `copier_slave_1_ack`
 
-EA автоматически зарегистрируется в базе данных и появится в Web UI.
+The EA will automatically register in the database and appear in the Web UI.
 
-### Создание связей (Links)
+### Creating Links
 
-В Web UI нажать **+ Add Link** и выбрать:
-- **Master** — источник сделок
-- **Slave** — получатель сделок
-- **Lot Mode** — `multiplier` (множитель) или `fixed` (фиксированный объём)
-- **Lot Value** — значение (например, `1.0` = тот же объём)
-- **Suffix** — суффикс символа для брокера слейва (например, `m` → `EURUSDm`, `.sml` → `EURUSD.sml`)
+In the Web UI, click **+ Add Link** and select:
+- **Master** — trade source
+- **Slave** — trade receiver
+- **Lot Mode** — `multiplier` or `fixed` (fixed volume)
+- **Lot Value** — value (e.g., `1.0` = same volume)
+- **Suffix** — symbol suffix for the slave broker (e.g., `m` → `EURUSDm`, `.sml` → `EURUSD.sml`)
 
-### Конфигурация сервиса
+### Service Configuration
 
-Настройки доступны в Web UI: http://localhost:3000/settings
+Settings are available in the Web UI: http://localhost:3000/settings
 
-| Параметр | По умолчанию | Описание |
-|----------|-------------|----------|
-| VPS ID | vps_1 | Идентификатор VPS |
-| Heartbeat Interval | 10 сек | Частота heartbeat от EA |
-| Heartbeat Timeout | 30 сек | Таймаут до статуса Disconnected |
-| ACK Timeout | 5 сек | Таймаут ожидания ACK от слейва |
-| ACK Max Retries | 3 | Количество повторных отправок |
-| Resend Window | 200 | Размер окна дедупликации |
-| Alert Dedup | 5 мин | Интервал дедупликации алертов |
-| Telegram | выкл | Отправка алертов в Telegram |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| VPS ID | vps_1 | VPS identifier |
+| Heartbeat Interval | 10 sec | Heartbeat frequency from EA |
+| Heartbeat Timeout | 30 sec | Timeout before Disconnected status |
+| ACK Timeout | 5 sec | Timeout waiting for ACK from slave |
+| ACK Max Retries | 3 | Number of retry attempts |
+| Resend Window | 200 | Deduplication window size |
+| Alert Dedup | 5 min | Alert deduplication interval |
+| Telegram | off | Send alerts to Telegram |
 
-## Поддерживаемые операции
+## Supported Operations
 
-| Операция | Описание |
-|----------|----------|
-| OPEN | Открытие новой позиции |
-| MODIFY | Изменение SL/TP существующей позиции |
-| CLOSE | Полное закрытие позиции |
-| CLOSE_PARTIAL | Частичное закрытие (по объёму) |
+| Operation | Description |
+|-----------|-------------|
+| OPEN | Open a new position |
+| MODIFY | Modify SL/TP of an existing position |
+| CLOSE | Fully close a position |
+| CLOSE_PARTIAL | Partially close a position (by volume) |
 
 ## Magic Number Mapping
 
-Формула: `slave_magic = master_magic - (master_magic % 100) + slave_setup_id`
+Formula: `slave_magic = master_magic - (master_magic % 100) + slave_setup_id`
 
-Настраивается через Web UI для каждой связи.
+Configured via the Web UI for each link.
 
-## База данных
+## Database
 
-SQLite в режиме WAL. Файл: `%APPDATA%\MetaQuotes\Terminal\Common\Files\TradeCopier\copier.db`
+SQLite in WAL mode. File: `%APPDATA%\MetaQuotes\Terminal\Common\Files\TradeCopier\copier.db`
 
-Создаётся автоматически при первом запуске Hub.
+Created automatically on the first Hub launch.
 
-## Тесты
+## Tests
 
 ```bash
-uv run pytest                    # Все тесты
-uv run pytest tests/test_router.py  # Конкретный файл
-uv run pytest -k "test_name"    # По имени
+uv run pytest                    # All tests
+uv run pytest tests/test_router.py  # Specific file
+uv run pytest -k "test_name"    # By name
 ```
 
-## Структура проекта
+## Project Structure
 
 ```
 hub/                    # Python Hub Service
-├── config.py           # Конфигурация (из SQLite)
+├── config.py           # Configuration (from SQLite)
 ├── main.py             # Entry point (asyncio)
-├── db/                 # Схема БД + DatabaseManager
-├── protocol/           # Модели сообщений + сериализация
+├── db/                 # DB schema + DatabaseManager
+├── protocol/           # Message models + serialization
 ├── mapping/            # Magic, symbol, lot mapping
-├── router/             # Маршрутизация + ResendWindow
+├── router/             # Routing + ResendWindow
 ├── transport/          # Named pipe server
 └── monitor/            # Health checks + Telegram alerts
 
 ea/                     # MQL5 Expert Advisors
-├── Include/            # Общие модули (pipe, protocol, logger, database)
+├── Include/            # Shared modules (pipe, protocol, logger, database)
 ├── Master/             # Master EA
 └── Slave/              # Slave EA
 
@@ -175,5 +175,5 @@ web/
 ├── api/                # FastAPI backend
 └── frontend/           # Next.js + shadcn/ui
 
-tests/                  # pytest тесты
+tests/                  # pytest tests
 ```

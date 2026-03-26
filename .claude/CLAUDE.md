@@ -1,20 +1,20 @@
 # CLAUDE.md
 
-Answer Always in Russian.
+Answer Always in English.
 
 ## Project Overview
 
-**Trade Copier** — система копирования сделок между MT5 терминалами.
+**Trade Copier** — a trade copying system between MT5 terminals.
 
-Состоит из 4 компонентов:
-- **Hub Service** (Python) — центральный маршрутизатор сообщений через Windows named pipes
-- **Master EA** (MQL5) — отслеживает сделки на мастер-терминале и отправляет в Hub
-- **Slave EA** (MQL5) — получает команды от Hub и исполняет сделки через CTrade
-- **Web UI** — FastAPI backend + Next.js frontend для управления терминалами и связями
+Consists of 4 components:
+- **Hub Service** (Python) — central message router via Windows named pipes
+- **Master EA** (MQL5) — monitors trades on the master terminal and sends them to Hub
+- **Slave EA** (MQL5) — receives commands from Hub and executes trades via CTrade
+- **Web UI** — FastAPI backend + Next.js frontend for managing terminals and links
 
 **Broker**: Pepperstone
-**Платформа**: Windows (named pipes для IPC)
-**Python**: 3.11+ с пакетным менеджером `uv`
+**Platform**: Windows (named pipes for IPC)
+**Python**: 3.11+ with package manager `uv`
 
 ## Architecture
 
@@ -35,11 +35,11 @@ Master EA ──named pipe──> Hub Service ──named pipe──> Slave EA
 ```
 hub/                          # Python Hub Service
 ├── db/
-│   ├── schema.sql            # DDL (9 таблиц, WAL mode)
-│   └── manager.py            # DatabaseManager (единственный writer)
+│   ├── schema.sql            # DDL (9 tables, WAL mode)
+│   └── manager.py            # DatabaseManager (sole writer)
 ├── protocol/
 │   ├── models.py             # MessageType, MasterMessage, SlaveCommand, AckMessage
-│   └── serializer.py         # JSON encode/decode с newline-разделителем
+│   └── serializer.py         # JSON encode/decode with newline delimiter
 ├── mapping/
 │   ├── magic.py              # Magic number parse + slave mapping
 │   ├── symbol.py             # Symbol resolution (explicit > suffix)
@@ -49,8 +49,8 @@ hub/                          # Python Hub Service
 ├── router/
 │   └── router.py             # Message router + ResendWindow (N=200)
 ├── monitor/
-│   ├── health.py             # 4 проверки: heartbeat, ACK timeout, NACKs, queue
-│   └── alerts.py             # Telegram alerts + дедупликация (5 мин)
+│   ├── health.py             # 4 checks: heartbeat, ACK timeout, NACKs, queue
+│   └── alerts.py             # Telegram alerts + deduplication (5 min)
 ├── config.py                 # Config loader (JSON)
 └── main.py                   # HubService entry point (asyncio)
 
@@ -66,7 +66,7 @@ ea/                           # MQL5 Expert Advisors
 
 web/
 ├── api/                      # FastAPI backend
-│   ├── main.py               # App с CORS
+│   ├── main.py               # App with CORS
 │   ├── database.py           # aiosqlite connection (WAL)
 │   ├── schemas.py            # Pydantic models
 │   └── routers/              # terminals, links, symbol_mappings, magic_mappings
@@ -78,9 +78,9 @@ web/
         ├── lib/              # api.ts, utils.ts
         └── types/            # Terminal, Link, SymbolMapping, MagicMapping
 
-tests/                        # 70 pytest tests (15 файлов)
-scripts/backup_db.py          # DB backup с WAL checkpoint + retention
-config/config.example.json    # Пример конфигурации
+tests/                        # 70 pytest tests (15 files)
+scripts/backup_db.py          # DB backup with WAL checkpoint + retention
+config/config.example.json    # Configuration example
 ```
 
 ## Build & Run Commands
@@ -103,13 +103,13 @@ cd web/frontend && npm run build        # Production build
 
 ### Tests
 ```bash
-uv run pytest                           # Все тесты
-uv run pytest tests/test_router.py      # Конкретный файл
-uv run pytest -k "test_name"            # По имени
+uv run pytest                           # All tests
+uv run pytest tests/test_router.py      # Specific file
+uv run pytest -k "test_name"            # By name
 ```
 
 ### MQL5
-Скопировать `ea/` в каталог MQL5 терминала, компилировать через MetaEditor.
+Copy `ea/` to the MQL5 terminal directory, compile via MetaEditor.
 
 ## Key Concepts
 
@@ -119,53 +119,53 @@ slave_magic = master_magic - (master_magic % 100) + slave_setup_id
 ```
 
 ### Symbol Resolution
-Приоритет: explicit mapping > suffix rule (`master_symbol + suffix`).
+Priority: explicit mapping > suffix rule (`master_symbol + suffix`).
 
 ### Lot Size Modes
 - **multiplier**: `master_volume * lot_value`
-- **fixed**: `lot_value` (константа)
-- **partial close**: пропорциональный пересчёт
+- **fixed**: `lot_value` (constant)
+- **partial close**: proportional recalculation
 
 ### Message Protocol
-Newline-delimited JSON через Windows named pipes.
-Типы: OPEN, MODIFY, CLOSE, CLOSE_PARTIAL, HEARTBEAT, REGISTER.
+Newline-delimited JSON via Windows named pipes.
+Types: OPEN, MODIFY, CLOSE, CLOSE_PARTIAL, HEARTBEAT, REGISTER.
 
 ### Database
-SQLite WAL mode. 9 таблиц. DatabaseManager — единственный writer.
+SQLite WAL mode. 9 tables. DatabaseManager — sole writer.
 
 ## Development Rules
 
 ### MUST DO
-1. **Read before modifying** — Всегда читай файл перед изменением
-2. **uv** — Используй `uv` для зависимостей, не pip
-3. **Tests** — Покрывай новую логику тестами (pytest-asyncio)
-4. **Async** — Hub Service на asyncio, не блокируй event loop
-5. **WAL mode** — SQLite всегда в WAL mode
+1. **Read before modifying** — Always read a file before modifying it
+2. **uv** — Use `uv` for dependencies, not pip
+3. **Tests** — Cover new logic with tests (pytest-asyncio)
+4. **Async** — Hub Service runs on asyncio, do not block the event loop
+5. **WAL mode** — SQLite always in WAL mode
 
 ### FORBIDDEN
-1. **DO NOT** блокируй asyncio event loop синхронными вызовами
-2. **DO NOT** пиши в БД мимо DatabaseManager
-3. **DO NOT** хардкодь пути к named pipes — используй config.json
-4. **DO NOT** удаляй health checks и alerts
+1. **DO NOT** block the asyncio event loop with synchronous calls
+2. **DO NOT** write to the database bypassing DatabaseManager
+3. **DO NOT** hardcode named pipe paths — use config.json
+4. **DO NOT** remove health checks and alerts
 
 ## Naming Conventions
 
 ### Python
-- Классы: `PascalCase` (DatabaseManager, PipeServer)
-- Функции: `snake_case` (compute_slave_volume, resolve_symbol)
-- Константы: `UPPER_CASE`
+- Classes: `PascalCase` (DatabaseManager, PipeServer)
+- Functions: `snake_case` (compute_slave_volume, resolve_symbol)
+- Constants: `UPPER_CASE`
 
 ### MQL5
-- Классы: `CClassName`, члены: `m_member`, inputs: `InpName`
+- Classes: `CClassName`, members: `m_member`, inputs: `InpName`
 - Enums: `ENUM_TYPE_VALUE`, structs: `SStructName`
-- Локальные: `snake_case`
+- Locals: `snake_case`
 
 ### TypeScript
-- Интерфейсы/компоненты: `PascalCase`
-- Хуки: `useCamelCase`
+- Interfaces/components: `PascalCase`
+- Hooks: `useCamelCase`
 
 ## Documentation
 
-- `docs/plans/` — Архитектура, БД, фронтенд, план реализации
-- `.claude/rules/trading-logic.md` — Правила торговой логики
+- `docs/plans/` — Architecture, DB, frontend, implementation plan
+- `.claude/rules/trading-logic.md` — Trading logic rules
 - `.claude/rules/mql5-style.md` — MQL5 code style guide

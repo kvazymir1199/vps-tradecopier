@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 
-# Фиксированный путь к БД — всегда в MQL5 Common Files
+# Fixed DB path — always in MQL5 Common Files
 DB_PATH = os.path.join(
     os.environ.get("APPDATA", ""),
     "MetaQuotes", "Terminal", "Common", "Files",

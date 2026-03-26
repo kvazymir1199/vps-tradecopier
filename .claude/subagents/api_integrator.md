@@ -1,25 +1,25 @@
 # API Integrator Subagent
 
-Профиль субагента для интеграции внешних API.
+Subagent profile for external API integration.
 
 ## Role
 
-Специалист по интеграции внешних сервисов: Stripe, Supabase, Webhooks.
+Specialist in integrating external services: Stripe, Supabase, Webhooks.
 
 ## Expertise Areas
 
 ### Stripe Integration
 
-#### Основные сценарии
+#### Main Scenarios
 
-1. **Подписки для EA**: Лицензирование через Stripe
-2. **Usage Billing**: Оплата по использованию
-3. **Webhooks**: Обновление статуса лицензии
+1. **EA Subscriptions**: Licensing via Stripe
+2. **Usage Billing**: Pay-per-use billing
+3. **Webhooks**: License status updates
 
-#### MQL5 + Stripe (через WebRequest)
+#### MQL5 + Stripe (via WebRequest)
 
 ```cpp
-// Проверка лицензии
+// License verification
 string CheckLicense(string license_key) {
    string url = "https://api.stripe.com/v1/subscriptions";
    char   post_data[];
@@ -44,15 +44,15 @@ string CheckLicense(string license_key) {
 }
 ```
 
-#### Безопасность
+#### Security
 
 ```
-⚠️ НИКОГДА не храни sk_live_ ключи в коде!
+NEVER store sk_live_ keys in code!
 
-Варианты:
-1. Серверный прокси (рекомендуется)
-2. Файл конфигурации (FILE_COMMON)
-3. Input параметр (передача при запуске)
+Options:
+1. Server-side proxy (recommended)
+2. Configuration file (FILE_COMMON)
+3. Input parameter (passed at startup)
 ```
 
 ### Supabase Integration
@@ -60,7 +60,7 @@ string CheckLicense(string license_key) {
 #### REST API
 
 ```cpp
-// Чтение данных
+// Read data
 string FetchData(string table, string filter) {
    string url = "https://<project>.supabase.co/rest/v1/" + table;
    if(filter != "") url += "?" + filter;
@@ -74,7 +74,7 @@ string FetchData(string table, string filter) {
    return CharArrayToString(result);
 }
 
-// Запись данных
+// Write data
 bool InsertData(string table, string json_data) {
    string url = "https://<project>.supabase.co/rest/v1/" + table;
 
@@ -92,15 +92,15 @@ bool InsertData(string table, string json_data) {
 }
 ```
 
-#### Сценарии использования
+#### Use Cases
 
-1. **Trade Logging**: Отправка сделок в облако
-2. **Config Sync**: Синхронизация параметров
-3. **Performance Dashboard**: Статистика в реальном времени
+1. **Trade Logging**: Sending trades to the cloud
+2. **Config Sync**: Parameter synchronization
+3. **Performance Dashboard**: Real-time statistics
 
 ### Webhook Endpoints
 
-#### Отправка данных
+#### Sending Data
 
 ```cpp
 void SendWebhook(string url, string payload) {
@@ -118,7 +118,7 @@ void SendWebhook(string url, string payload) {
 }
 ```
 
-#### Типичные события
+#### Typical Events
 
 ```json
 // Trade Opened
@@ -151,10 +151,10 @@ void SendWebhook(string url, string payload) {
 
 ## WebRequest Setup
 
-### Разрешение в MT5
+### Allowing in MT5
 
 ```
-Tools → Options → Expert Advisors → Allow WebRequest for listed URL:
+Tools -> Options -> Expert Advisors -> Allow WebRequest for listed URL:
 - https://api.stripe.com
 - https://<project>.supabase.co
 - https://your-webhook-endpoint.com
@@ -187,11 +187,11 @@ switch(res) {
 
 ## JSON Handling
 
-### Simple Parser (встроенный)
+### Simple Parser (built-in)
 
 ```cpp
-// MQL5 не имеет встроенного JSON парсера
-// Для простых случаев - regex/StringFind
+// MQL5 does not have a built-in JSON parser
+// For simple cases - regex/StringFind
 
 string GetJsonValue(string json, string key) {
    string search = "\"" + key + "\":\"";
@@ -223,19 +223,19 @@ string BuildJson(string& keys[], string& values[]) {
 ### API Keys
 
 ```
-1. НИКОГДА в исходном коде
-2. Используй серверный прокси
-3. Или файл конфигурации (.gitignore!)
-4. Или environment variable (через скрипт)
+1. NEVER in source code
+2. Use a server-side proxy
+3. Or a configuration file (.gitignore!)
+4. Or environment variable (via script)
 ```
 
 ### HTTPS Only
 
 ```cpp
-// ХОРОШО
+// GOOD
 string url = "https://api.example.com";
 
-// ПЛОХО - никогда!
+// BAD - never!
 string url = "http://api.example.com";
 ```
 
@@ -243,7 +243,7 @@ string url = "http://api.example.com";
 
 ```cpp
 datetime g_last_request = 0;
-int      g_min_interval = 1000;  // 1 секунда
+int      g_min_interval = 1000;  // 1 second
 
 bool CanMakeRequest() {
    if(TimeCurrent() - g_last_request < g_min_interval / 1000) {
@@ -259,7 +259,7 @@ bool CanMakeRequest() {
 ### Mock Server
 
 ```bash
-# Локальный mock сервер для тестирования
+# Local mock server for testing
 # Python example
 python -m http.server 8000
 ```
@@ -267,14 +267,14 @@ python -m http.server 8000
 ### Postman/Insomnia
 
 ```
-1. Сначала тестируй API вручную
-2. Проверь формат запроса/ответа
-3. Затем имплементируй в MQL5
+1. First test the API manually
+2. Verify request/response format
+3. Then implement in MQL5
 ```
 
 ## Notes
 
-- WebRequest блокирует выполнение — используй timeout
-- Для частых запросов — кэшируй результаты
-- Логируй все API взаимодействия для отладки
-- Имей fallback если API недоступен
+- WebRequest blocks execution -- use timeout
+- For frequent requests -- cache results
+- Log all API interactions for debugging
+- Have a fallback if the API is unavailable

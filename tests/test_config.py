@@ -2,7 +2,7 @@ from hub.config import Config, DB_PATH
 
 
 def test_from_db_defaults():
-    """Config.from_db со значениями по умолчанию (пустой dict)."""
+    """Config.from_db with default values (empty dict)."""
     cfg = Config.from_db({})
     assert cfg.db_path == DB_PATH
     assert cfg.vps_id == "vps_1"
@@ -18,7 +18,7 @@ def test_from_db_defaults():
 
 
 def test_from_db_with_all_fields():
-    """Config.from_db со всеми полями из БД."""
+    """Config.from_db with all fields from DB."""
     data = {
         "vps_id": "vps_2",
         "heartbeat_interval_sec": "5",
