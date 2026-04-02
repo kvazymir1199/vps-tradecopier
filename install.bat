@@ -68,18 +68,29 @@ echo.
 echo [3/3] Installing packages...
 echo.
 
+:: Show Python version for diagnostics
+echo   - Python version:
+python --version
+
+:: Remove previous virtual environment if it exists (may be corrupted)
+if exist "%~dp0.venv" (
+    echo   - Removing previous virtual environment...
+    rmdir /s /q "%~dp0.venv"
+)
+
 :: Create Python virtual environment
 echo   - Creating virtual environment...
-python -m venv .venv
+python -m venv "%~dp0.venv"
 if errorlevel 1 (
     echo.
     echo ERROR: Failed to create virtual environment.
+    echo Try running: py -3 -m venv .venv
     pause & exit /b 1
 )
 
 :: Install Python dependencies from pyproject.toml
 echo   - Installing Python dependencies...
-.venv\Scripts\pip.exe install . -q
+"%~dp0.venv\Scripts\pip.exe" install . -q
 if errorlevel 1 (
     echo.
     echo ERROR: Failed to install Python dependencies.
