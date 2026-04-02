@@ -55,9 +55,10 @@ if exist "%PIP_EXE%" (
 ) else (
     echo [2/6] Configuring Python and installing pip...
 
-    :: Enable import site in _pth file so pip/packages work
+    :: Configure _pth file: enable import site + add project root
     echo python312.zip> "%PYTHON_DIR%\python312._pth"
     echo .>> "%PYTHON_DIR%\python312._pth"
+    echo ..\..>> "%PYTHON_DIR%\python312._pth"
     echo import site>> "%PYTHON_DIR%\python312._pth"
 
     :: Download and run get-pip.py
@@ -84,8 +85,7 @@ if exist "%PYTHON_DIR%\Lib\site-packages\uvicorn" (
     echo [3/6] Python dependencies already installed.
 ) else (
     echo [3/6] Installing Python dependencies...
-    "%PIP_EXE%" install setuptools wheel -q --no-warn-script-location
-    "%PIP_EXE%" install . -q --no-warn-script-location
+    "%PIP_EXE%" install aiosqlite fastapi pywin32 python-telegram-bot uvicorn -q --no-warn-script-location
     if errorlevel 1 (
         echo ERROR: Failed to install Python dependencies.
         pause & exit /b 1
