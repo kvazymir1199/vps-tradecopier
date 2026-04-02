@@ -192,7 +192,7 @@ void ProcessCommand(string raw)
    if(IsDuplicateMessage(cmd.masterId, cmd.msgId))
    {
       g_logger.Info(StringFormat("Duplicate msg_id=%d from %s — skipping", cmd.msgId, cmd.masterId));
-      SendNack(cmd.msgId, "DUPLICATE_MSG");
+      SendAck(cmd.msgId, 0);
       return;
    }
 

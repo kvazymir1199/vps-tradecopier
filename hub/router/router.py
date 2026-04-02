@@ -4,7 +4,7 @@ from hub.db.manager import DatabaseManager
 from hub.protocol.models import MasterMessage, SlaveCommand, MessageType
 from hub.mapping.magic import compute_slave_magic, parse_master_magic
 from hub.mapping.symbol import resolve_symbol
-from hub.mapping.lot import compute_slave_volume
+from hub.mapping.lot import compute_slave_volume, compute_partial_close_volume
 
 
 class ResendWindow:
@@ -53,7 +53,7 @@ class Router:
     async def _build_slave_command(self, msg: MasterMessage, link: dict) -> SlaveCommand | None:
         # Resolve symbol
         explicit_mappings = await self._db.get_symbol_mappings(link["id"])
-        slave_symbol = resolve_symbol(msg.payload.get("symbol", ""), explicit_mappings)
+        slave_symbol = resolve_symbol(msg.payload.get("symbol", ""), link.get("symbol_suffix", ""), explicit_mappings)
 
         # Resolve magic
         master_magic = msg.payload.get("magic", 0)
@@ -75,7 +75,14 @@ class Router:
         payload["comment"] = f"Copy:{msg.master_id}:{payload.get('master_ticket', '')}"
 
         # Apply volume mapping only for types that carry volume
-        if msg.type in (MessageType.OPEN, MessageType.CLOSE_PARTIAL, MessageType.PENDING_PLACE):
+        if msg.type == MessageType.CLOSE_PARTIAL:
+            payload["volume"] = compute_partial_close_volume(
+                msg.payload.get("volume", 0),
+                link["lot_mode"], link["lot_value"],
+                msg.payload.get("master_open_volume", msg.payload.get("volume", 0)),
+                slave_volume,
+            )
+        elif msg.type in (MessageType.OPEN, MessageType.PENDING_PLACE):
             payload["volume"] = slave_volume
 
         return SlaveCommand(

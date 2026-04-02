@@ -11,8 +11,8 @@ async def router():
     await db.register_terminal("master_1", "master", 111, "B1")
     await db.register_terminal("slave_1", "slave", 222, "B2")
     await db.execute(
-        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, created_at) "
-        "VALUES ('master_1', 'slave_1', 1, 'multiplier', 2.0, 0)"
+        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, symbol_suffix, created_at) "
+        "VALUES ('master_1', 'slave_1', 1, 'multiplier', 2.0, '', 0)"
     )
     await db.execute(
         "INSERT INTO magic_mappings (link_id, master_setup_id, slave_setup_id) VALUES (1, 1, 5)"
@@ -91,6 +91,58 @@ async def test_route_duplicate_msg_id_skipped(router):
     commands2 = await router.route(msg)  # duplicate
     assert len(commands1) == 1
     assert len(commands2) == 0
+
+
+@pytest.fixture
+async def router_fixed():
+    """Router with fixed lot mode (lot_value=0.20)."""
+    db = DatabaseManager(":memory:")
+    await db.initialize()
+    await db.register_terminal("master_1", "master", 111, "B1")
+    await db.register_terminal("slave_1", "slave", 222, "B2")
+    await db.execute(
+        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, symbol_suffix, created_at) "
+        "VALUES ('master_1', 'slave_1', 1, 'fixed', 0.20, '', 0)"
+    )
+    await db.execute(
+        "INSERT INTO magic_mappings (link_id, master_setup_id, slave_setup_id) VALUES (1, 1, 5)"
+    )
+    r = Router(db)
+    yield r
+    await db.close()
+
+
+@pytest.mark.asyncio
+async def test_route_close_partial_proportional(router_fixed):
+    """CLOSE_PARTIAL with fixed lot should use proportional volume."""
+    msg = MasterMessage(
+        msg_id=1, master_id="master_1", type=MessageType.CLOSE_PARTIAL, ts_ms=170,
+        payload={"ticket": 123, "symbol": "EURUSD",
+                 "volume": 0.05,
+                 "master_open_volume": 0.10,
+                 "magic": 15010301},
+    )
+    commands = await router_fixed.route(msg)
+    assert len(commands) == 1
+    # fixed mode: slave_open = lot_value = 0.20
+    # proportional: (0.05 / 0.10) * 0.20 = 0.10
+    assert commands[0].payload["volume"] == 0.10
+
+
+@pytest.mark.asyncio
+async def test_route_close_partial_multiplier(router):
+    """CLOSE_PARTIAL with multiplier should scale close volume."""
+    msg = MasterMessage(
+        msg_id=1, master_id="master_1", type=MessageType.CLOSE_PARTIAL, ts_ms=170,
+        payload={"ticket": 123, "symbol": "EURUSD",
+                 "volume": 0.05,
+                 "master_open_volume": 0.10,
+                 "magic": 15010301},
+    )
+    commands = await router.route(msg)
+    assert len(commands) == 1
+    # multiplier mode (2.0): 0.05 * 2.0 = 0.10
+    assert commands[0].payload["volume"] == 0.10
 
 
 @pytest.mark.asyncio

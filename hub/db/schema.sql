@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS master_slave_links (
     lot_mode        TEXT    NOT NULL DEFAULT 'multiplier'
                            CHECK (lot_mode IN ('multiplier', 'fixed')),
     lot_value       REAL    NOT NULL DEFAULT 1.0,
+    symbol_suffix   TEXT    DEFAULT '',
     created_at      INTEGER NOT NULL,
 
     UNIQUE(master_id, slave_id)
