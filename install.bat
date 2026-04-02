@@ -13,10 +13,10 @@ echo.
 
 set NEED_RELAUNCH=0
 
-:: [1/3] Python
-where python >nul 2>&1
+:: [1/3] Python — check for REAL Python 3 (not Microsoft Store stub)
+python --version 2>&1 | findstr /r "Python 3\." >nul 2>&1
 if errorlevel 1 (
-    echo [1/3] Python not found. Installing...
+    echo [1/3] Python not found. Installing Python 3.12...
     winget install --id Python.Python.3.12 --silent --accept-package-agreements --accept-source-agreements
     if errorlevel 1 (
         echo.
@@ -60,7 +60,7 @@ if "%NEED_RELAUNCH%"=="1" (
 goto :setup
 
 :: ============================================================
-:: STAGE 2: Install packages (runs in fresh process if needed)
+:: STAGE 2: Install packages
 :: ============================================================
 :setup
 
@@ -68,24 +68,25 @@ echo.
 echo [3/3] Installing packages...
 echo.
 
-:: Show Python version for diagnostics
-echo   - Python version:
-python --version
+:: Show Python version for confirmation
+for /f "tokens=*" %%V in ('python --version 2^>^&1') do echo   - Using %%V
 
-:: Remove previous virtual environment if it exists (may be corrupted)
+:: Remove previous virtual environment if it exists
 if exist "%~dp0.venv" (
     echo   - Removing previous virtual environment...
     rmdir /s /q "%~dp0.venv"
 )
 
-:: Create Python virtual environment
+:: Create virtual environment — try py launcher first, then python
 echo   - Creating virtual environment...
-python -m venv "%~dp0.venv"
+py -3 -m venv "%~dp0.venv" >nul 2>&1
 if errorlevel 1 (
-    echo.
-    echo ERROR: Failed to create virtual environment.
-    echo Try running: py -3 -m venv .venv
-    pause & exit /b 1
+    python -m venv "%~dp0.venv"
+    if errorlevel 1 (
+        echo.
+        echo ERROR: Failed to create virtual environment.
+        pause & exit /b 1
+    )
 )
 
 :: Install Python dependencies from pyproject.toml
