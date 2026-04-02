@@ -11,3 +11,4 @@ node_modules/
 .next/
 config/config.json
 uv.lock
+tools/

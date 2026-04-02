@@ -3,7 +3,17 @@ setlocal enabledelayedexpansion
 title Trade Copier — Installer
 cd /d "%~dp0"
 
-if "%1"=="--setup" goto :setup
+set "TOOLS_DIR=%~dp0tools"
+set "PYTHON_DIR=%TOOLS_DIR%\python"
+set "NODE_DIR=%TOOLS_DIR%\node"
+set "PYTHON_EXE=%PYTHON_DIR%\python.exe"
+set "PIP_EXE=%PYTHON_DIR%\Scripts\pip.exe"
+set "NODE_EXE=%NODE_DIR%\node.exe"
+set "NPM_CMD=%NODE_DIR%\npm.cmd"
+
+set "PYTHON_ZIP_URL=https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip"
+set "GET_PIP_URL=https://bootstrap.pypa.io/get-pip.py"
+set "NODE_ZIP_URL=https://nodejs.org/dist/v20.18.1/node-v20.18.1-win-x64.zip"
 
 echo.
 echo =============================================
@@ -11,112 +21,134 @@ echo   Trade Copier - First-Time Setup
 echo =============================================
 echo.
 
-set NEED_RELAUNCH=0
-
-:: [1/3] Python — check for REAL Python 3 (not Microsoft Store stub)
-python --version 2>&1 | findstr /r "Python 3\." >nul 2>&1
-if errorlevel 1 (
-    echo [1/3] Python not found. Installing Python 3.12...
-    winget install --id Python.Python.3.12 --silent --accept-package-agreements --accept-source-agreements
-    if errorlevel 1 (
-        echo.
-        echo ERROR: Could not install Python automatically.
-        echo Please install Python 3.12+ from: https://python.org
-        echo.
-        pause
-        exit /b 1
-    )
-    set NEED_RELAUNCH=1
-) else (
-    echo [1/3] Python OK
-)
-
-:: [2/3] Node.js
-where npm >nul 2>&1
-if errorlevel 1 (
-    echo [2/3] Node.js not found. Installing...
-    winget install --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
-    if errorlevel 1 (
-        echo.
-        echo ERROR: Could not install Node.js automatically.
-        echo Please install Node.js 18+ from: https://nodejs.org
-        echo.
-        pause
-        exit /b 1
-    )
-    set NEED_RELAUNCH=1
-) else (
-    echo [2/3] Node.js OK
-)
-
-:: If winget installed something, relaunch in a fresh cmd with updated PATH
-if "%NEED_RELAUNCH%"=="1" (
-    echo.
-    echo [3/3] Finalizing installation in new window...
-    start /wait "" cmd /k ""%~f0" --setup"
-    exit /b 0
-)
-
-goto :setup
-
 :: ============================================================
-:: STAGE 2: Install packages
+:: [1/6] Download Python embeddable
 :: ============================================================
-:setup
+if exist "%PYTHON_EXE%" (
+    echo [1/6] Python already downloaded.
+) else (
+    echo [1/6] Downloading Python 3.12...
+    if not exist "%TOOLS_DIR%" mkdir "%TOOLS_DIR%"
 
-echo.
-echo [3/3] Installing packages...
-echo.
-
-:: Show Python version for confirmation
-for /f "tokens=*" %%V in ('python --version 2^>^&1') do echo   - Using %%V
-
-:: Remove previous virtual environment if it exists
-if exist "%~dp0.venv" (
-    echo   - Removing previous virtual environment...
-    rmdir /s /q "%~dp0.venv"
-)
-
-:: Create virtual environment — try py launcher first, then python
-echo   - Creating virtual environment...
-py -3 -m venv "%~dp0.venv" >nul 2>&1
-if errorlevel 1 (
-    python -m venv "%~dp0.venv"
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri '%PYTHON_ZIP_URL%' -OutFile '%TOOLS_DIR%\python.zip'"
     if errorlevel 1 (
-        echo.
-        echo ERROR: Failed to create virtual environment.
+        echo ERROR: Failed to download Python.
         pause & exit /b 1
     )
-)
 
-:: Install Python dependencies from pyproject.toml
-echo   - Installing Python dependencies...
-"%~dp0.venv\Scripts\pip.exe" install . -q
-if errorlevel 1 (
-    echo.
-    echo ERROR: Failed to install Python dependencies.
-    pause & exit /b 1
-)
-
-:: Install frontend dependencies
-echo   - Installing frontend dependencies...
-if not exist "%~dp0web\frontend\node_modules" (
-    pushd "%~dp0web\frontend"
-    npm install --silent
+    echo       Extracting...
+    powershell -NoProfile -Command "Expand-Archive -Path '%TOOLS_DIR%\python.zip' -DestinationPath '%PYTHON_DIR%' -Force"
     if errorlevel 1 (
-        echo.
+        echo ERROR: Failed to extract Python.
+        pause & exit /b 1
+    )
+
+    del "%TOOLS_DIR%\python.zip" 2>nul
+    echo [1/6] Python downloaded.
+)
+
+:: ============================================================
+:: [2/6] Configure Python for pip (enable import site)
+:: ============================================================
+if exist "%PIP_EXE%" (
+    echo [2/6] pip already installed.
+) else (
+    echo [2/6] Configuring Python and installing pip...
+
+    :: Enable import site in _pth file so pip/packages work
+    echo python312.zip> "%PYTHON_DIR%\python312._pth"
+    echo .>> "%PYTHON_DIR%\python312._pth"
+    echo import site>> "%PYTHON_DIR%\python312._pth"
+
+    :: Download and run get-pip.py
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri '%GET_PIP_URL%' -OutFile '%TOOLS_DIR%\get-pip.py'"
+    if errorlevel 1 (
+        echo ERROR: Failed to download get-pip.py.
+        pause & exit /b 1
+    )
+
+    "%PYTHON_EXE%" "%TOOLS_DIR%\get-pip.py" --no-warn-script-location -q
+    if errorlevel 1 (
+        echo ERROR: Failed to install pip.
+        pause & exit /b 1
+    )
+
+    del "%TOOLS_DIR%\get-pip.py" 2>nul
+    echo [2/6] pip installed.
+)
+
+:: ============================================================
+:: [3/6] Install Python dependencies
+:: ============================================================
+if exist "%PYTHON_DIR%\Lib\site-packages\uvicorn" (
+    echo [3/6] Python dependencies already installed.
+) else (
+    echo [3/6] Installing Python dependencies...
+    "%PIP_EXE%" install setuptools wheel -q --no-warn-script-location
+    "%PIP_EXE%" install . -q --no-warn-script-location
+    if errorlevel 1 (
+        echo ERROR: Failed to install Python dependencies.
+        pause & exit /b 1
+    )
+    echo [3/6] Python dependencies installed.
+)
+
+:: ============================================================
+:: [4/6] Download Node.js portable
+:: ============================================================
+if exist "%NODE_EXE%" (
+    echo [4/6] Node.js already downloaded.
+) else (
+    echo [4/6] Downloading Node.js 20 LTS...
+
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri '%NODE_ZIP_URL%' -OutFile '%TOOLS_DIR%\node.zip'"
+    if errorlevel 1 (
+        echo ERROR: Failed to download Node.js.
+        pause & exit /b 1
+    )
+
+    echo       Extracting...
+    powershell -NoProfile -Command "Expand-Archive -Path '%TOOLS_DIR%\node.zip' -DestinationPath '%TOOLS_DIR%\node-temp' -Force"
+    if errorlevel 1 (
+        echo ERROR: Failed to extract Node.js.
+        pause & exit /b 1
+    )
+
+    :: Node zip extracts into a subfolder (node-v20.18.1-win-x64), move contents up
+    for /d %%D in ("%TOOLS_DIR%\node-temp\node-v*") do (
+        move "%%D" "%NODE_DIR%" >nul
+    )
+    rmdir /s /q "%TOOLS_DIR%\node-temp" 2>nul
+
+    del "%TOOLS_DIR%\node.zip" 2>nul
+    echo [4/6] Node.js downloaded.
+)
+
+:: ============================================================
+:: [5/6] Install frontend dependencies
+:: ============================================================
+if exist "%~dp0web\frontend\node_modules" (
+    echo [5/6] Frontend dependencies already installed.
+) else (
+    echo [5/6] Installing frontend dependencies...
+    set "PATH=%NODE_DIR%;%PATH%"
+    pushd "%~dp0web\frontend"
+    "%NPM_CMD%" install
+    if errorlevel 1 (
         echo ERROR: Failed to install frontend dependencies.
         popd
         pause & exit /b 1
     )
     popd
-) else (
-    echo   - Frontend dependencies already installed.
+    echo [5/6] Frontend dependencies installed.
 )
 
+:: ============================================================
+:: [6/6] Done
+:: ============================================================
 echo.
 echo =============================================
-echo   Setup complete!
+echo   [6/6] Setup complete!
 echo   Run start.bat to launch the application.
 echo =============================================
 echo.
