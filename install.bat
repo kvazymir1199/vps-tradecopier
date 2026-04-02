@@ -57,11 +57,10 @@ if "%NEED_RELAUNCH%"=="1" (
     exit /b 0
 )
 
-:: PATH is already current, run setup directly
 goto :setup
 
 :: ============================================================
-:: STAGE 2: Install Python/Node packages
+:: STAGE 2: Install packages (runs in fresh process if needed)
 :: ============================================================
 :setup
 
@@ -69,30 +68,31 @@ echo.
 echo [3/3] Installing packages...
 echo.
 
-echo   - Installing uv...
-python -m pip install uv -q
+:: Create Python virtual environment
+echo   - Creating virtual environment...
+python -m venv .venv
 if errorlevel 1 (
-    echo ERROR: Failed to install uv.
+    echo.
+    echo ERROR: Failed to create virtual environment.
     pause & exit /b 1
 )
 
-:: Add Python Scripts directory to PATH so uv.exe is found immediately
-for /f "delims=" %%P in ('python -c "import sysconfig; print(sysconfig.get_path(\"scripts\"))"') do set "PYTHON_SCRIPTS=%%P"
-set "PATH=%PYTHON_SCRIPTS%;%PATH%"
-
-echo   - Creating virtual environment and installing Python dependencies...
-uv sync
+:: Install Python dependencies from pyproject.toml
+echo   - Installing Python dependencies...
+.venv\Scripts\pip.exe install . -q
 if errorlevel 1 (
     echo.
     echo ERROR: Failed to install Python dependencies.
     pause & exit /b 1
 )
 
+:: Install frontend dependencies
 echo   - Installing frontend dependencies...
 if not exist "%~dp0web\frontend\node_modules" (
     pushd "%~dp0web\frontend"
     npm install --silent
     if errorlevel 1 (
+        echo.
         echo ERROR: Failed to install frontend dependencies.
         popd
         pause & exit /b 1
