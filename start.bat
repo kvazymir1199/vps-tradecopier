@@ -9,15 +9,27 @@ echo   Trade Copier - One-Click Launcher
 echo =============================================
 echo.
 
+:: Refresh PATH from Windows registry (picks up newly installed tools)
+call :refresh_path
+
 :: [0] Python
 where python >nul 2>&1
 if errorlevel 1 (
     echo [0/5] Python not found. Installing via winget...
-    winget install --id Python.Python.3.11 --silent --accept-package-agreements >nul 2>&1
+    winget install --id Python.Python.3.12 --silent --accept-package-agreements --accept-source-agreements >nul 2>&1
     if errorlevel 1 (
         echo.
         echo ERROR: Could not install Python automatically.
-        echo Please install Python 3.11+ manually from: https://python.org
+        echo Please install Python 3.12+ manually from: https://python.org
+        echo.
+        pause
+        exit /b 1
+    )
+    call :refresh_path
+    where python >nul 2>&1
+    if errorlevel 1 (
+        echo.
+        echo ERROR: Python installed but not found in PATH. Please restart this script.
         echo.
         pause
         exit /b 1
@@ -29,7 +41,8 @@ echo [0/5] Python OK
 where uv >nul 2>&1
 if errorlevel 1 (
     echo [1/5] Installing uv package manager...
-    pip install uv -q
+    python -m pip install uv -q
+    call :refresh_path
 )
 echo [1/5] uv OK
 
@@ -41,11 +54,20 @@ uv sync -q
 where npm >nul 2>&1
 if errorlevel 1 (
     echo [3/5] Node.js not found. Installing via winget...
-    winget install --id OpenJS.NodeJS.LTS --silent --accept-package-agreements >nul 2>&1
+    winget install --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements >nul 2>&1
     if errorlevel 1 (
         echo.
         echo ERROR: Could not install Node.js automatically.
         echo Please install Node.js 18+ manually from: https://nodejs.org
+        echo.
+        pause
+        exit /b 1
+    )
+    call :refresh_path
+    where npm >nul 2>&1
+    if errorlevel 1 (
+        echo.
+        echo ERROR: Node.js installed but npm not found in PATH. Please restart this script.
         echo.
         pause
         exit /b 1
@@ -92,3 +114,8 @@ echo.
 
 timeout /t 3 /nobreak >nul
 start http://localhost:3000
+exit /b 0
+
+:refresh_path
+for /f "delims=" %%P in ('powershell -NoProfile -Command "[System.Environment]::GetEnvironmentVariable(\"Path\",\"Machine\") + \";\" + [System.Environment]::GetEnvironmentVariable(\"Path\",\"User\")"') do set "PATH=%%P"
+goto :eof
