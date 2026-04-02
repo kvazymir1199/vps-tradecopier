@@ -3,9 +3,6 @@ setlocal enabledelayedexpansion
 title Trade Copier — Installer
 cd /d "%~dp0"
 
-:: ============================================================
-:: STAGE 2: called from Stage 1 in a fresh process with updated PATH
-:: ============================================================
 if "%1"=="--setup" goto :setup
 
 echo.
@@ -52,19 +49,19 @@ if errorlevel 1 (
     echo [2/3] Node.js OK
 )
 
-:: If winget installed something, relaunch in a fresh cmd to get updated PATH
+:: If winget installed something, relaunch in a fresh cmd with updated PATH
 if "%NEED_RELAUNCH%"=="1" (
     echo.
-    echo [3/3] Finalizing installation...
-    start /wait "" cmd /c ""%~f0" --setup & pause"
-    goto :done
+    echo [3/3] Finalizing installation in new window...
+    start /wait "" cmd /k ""%~f0" --setup"
+    exit /b 0
 )
 
-:: PATH already current, run setup directly
+:: PATH is already current, run setup directly
 goto :setup
 
 :: ============================================================
-:: STAGE 2: Install Python/Node packages (fresh PATH)
+:: STAGE 2: Install Python/Node packages
 :: ============================================================
 :setup
 
@@ -72,22 +69,39 @@ echo.
 echo [3/3] Installing packages...
 echo.
 
-echo   - Installing uv package manager...
+echo   - Installing uv...
 python -m pip install uv -q
+if errorlevel 1 (
+    echo ERROR: Failed to install uv.
+    pause & exit /b 1
+)
 
-echo   - Installing Python dependencies...
-python -m uv sync
+:: Add Python Scripts directory to PATH so uv.exe is found immediately
+for /f "delims=" %%P in ('python -c "import sysconfig; print(sysconfig.get_path(\"scripts\"))"') do set "PYTHON_SCRIPTS=%%P"
+set "PATH=%PYTHON_SCRIPTS%;%PATH%"
+
+echo   - Creating virtual environment and installing Python dependencies...
+uv sync
+if errorlevel 1 (
+    echo.
+    echo ERROR: Failed to install Python dependencies.
+    pause & exit /b 1
+)
 
 echo   - Installing frontend dependencies...
 if not exist "%~dp0web\frontend\node_modules" (
     pushd "%~dp0web\frontend"
     npm install --silent
+    if errorlevel 1 (
+        echo ERROR: Failed to install frontend dependencies.
+        popd
+        pause & exit /b 1
+    )
     popd
 ) else (
     echo   - Frontend dependencies already installed.
 )
 
-:done
 echo.
 echo =============================================
 echo   Setup complete!
