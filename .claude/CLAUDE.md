@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Answer Always in English.
+Answer Always in Russian. Code and comments must be in English.
 
 ## Project Overview
 
