@@ -108,6 +108,8 @@ if exist "%NODE_EXE%" (
     )
 
     echo       Extracting...
+    if exist "%TOOLS_DIR%\node-temp" rmdir /s /q "%TOOLS_DIR%\node-temp"
+    if exist "%NODE_DIR%" rmdir /s /q "%NODE_DIR%"
     powershell -NoProfile -Command "Expand-Archive -Path '%TOOLS_DIR%\node.zip' -DestinationPath '%TOOLS_DIR%\node-temp' -Force"
     if errorlevel 1 (
         echo ERROR: Failed to extract Node.js.
@@ -116,7 +118,11 @@ if exist "%NODE_EXE%" (
 
     :: Node zip extracts into a subfolder (node-v20.18.1-win-x64), move contents up
     for /d %%D in ("%TOOLS_DIR%\node-temp\node-v*") do (
-        move "%%D" "%NODE_DIR%" >nul
+        move "%%D" "%NODE_DIR%" >nul 2>&1
+    )
+    if not exist "%NODE_EXE%" (
+        echo ERROR: Node.js extraction failed - node.exe not found.
+        pause & exit /b 1
     )
     rmdir /s /q "%TOOLS_DIR%\node-temp" 2>nul
 

@@ -56,7 +56,7 @@ start "Hub Service" cmd /k "cd /d "%~dp0" && echo Starting Hub Service on named 
 timeout /t 2 /nobreak >nul
 
 echo Starting FastAPI Backend...
-start "FastAPI Backend" cmd /k "cd /d "%~dp0" && echo Starting FastAPI on http://localhost:8000 && "%UVICORN_EXE%" web.api.main:app --host 0.0.0.0 --port 8000"
+start "FastAPI Backend" cmd /k "cd /d "%~dp0" && echo Starting FastAPI on http://localhost:8000 && "%PYTHON_EXE%" -m uvicorn web.api.main:app --host 0.0.0.0 --port 8000"
 
 timeout /t 1 /nobreak >nul
 
