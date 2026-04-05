@@ -3,6 +3,20 @@ setlocal
 title Trade Copier — Launcher
 cd /d "%~dp0"
 
+:: ============================================================
+:: Check for Administrator privileges
+:: ============================================================
+net session >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo =============================================
+    echo   Requesting Administrator privileges...
+    echo =============================================
+    echo.
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    exit /b 0
+)
+
 set "TOOLS_DIR=%~dp0tools"
 set "PYTHON_EXE=%TOOLS_DIR%\python\python.exe"
 set "UVICORN_EXE=%TOOLS_DIR%\python\Scripts\uvicorn.exe"

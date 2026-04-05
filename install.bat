@@ -3,6 +3,21 @@ setlocal enabledelayedexpansion
 title Trade Copier — Installer
 cd /d "%~dp0"
 
+:: ============================================================
+:: Check for Administrator privileges
+:: Program Files and other protected paths require elevation
+:: ============================================================
+net session >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo =============================================
+    echo   Requesting Administrator privileges...
+    echo =============================================
+    echo.
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    exit /b 0
+)
+
 set "TOOLS_DIR=%~dp0tools"
 set "PYTHON_DIR=%TOOLS_DIR%\python"
 set "NODE_DIR=%TOOLS_DIR%\node"
