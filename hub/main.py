@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 
 from hub.config import Config, DB_PATH
 from hub.db.manager import DatabaseManager
@@ -13,7 +14,7 @@ from hub.protocol.serializer import decode_master_message, encode_slave_command,
 from hub.monitor.health import HealthChecker
 from hub.monitor.alerts import AlertSender
 
-LOG_DIR = "C:\\TradeCopier\\logs"
+LOG_DIR = str(Path(DB_PATH).parent)
 os.makedirs(LOG_DIR, exist_ok=True)
 
 logging.basicConfig(
