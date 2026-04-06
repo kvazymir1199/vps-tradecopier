@@ -4,6 +4,7 @@ from collections.abc import Callable, Awaitable
 
 import win32pipe
 import win32file
+import win32security
 import pywintypes
 
 logger = logging.getLogger(__name__)
@@ -110,7 +111,23 @@ class PipeServer:
                 self._handle = None
             logger.info(f"Pipe {self._pipe_name} client disconnected")
 
+    @staticmethod
+    def _make_security_attributes():
+        """Return a SECURITY_ATTRIBUTES with a NULL DACL (grants Everyone full access).
+
+        Needed because the Hub runs as Administrator (UAC-elevated via start.bat),
+        while MT5 EAs run as a normal user.  Without explicit permissions the OS
+        would deny GENERIC_WRITE access to non-admin clients.
+        """
+        sd = win32security.SECURITY_DESCRIPTOR()
+        # NULL DACL = grant all access to everyone
+        sd.SetSecurityDescriptorDacl(True, None, False)
+        sa = win32security.SECURITY_ATTRIBUTES()
+        sa.SECURITY_DESCRIPTOR = sd
+        return sa
+
     def _create_and_connect(self):
+        sa = self._make_security_attributes()
         handle = win32pipe.CreateNamedPipe(
             self._pipe_name,
             win32pipe.PIPE_ACCESS_DUPLEX,
@@ -119,7 +136,7 @@ class PipeServer:
             PIPE_BUFFER_SIZE,
             PIPE_BUFFER_SIZE,
             0,
-            None,
+            sa,
         )
         win32pipe.ConnectNamedPipe(handle, None)
         return handle
