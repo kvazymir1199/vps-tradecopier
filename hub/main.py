@@ -262,7 +262,7 @@ class HubService:
                 slave_pipe = self._slave_cmd_pipes.get(cmd.slave_id)
                 if slave_pipe and slave_pipe._handle:
                     encoded = encode_slave_command(cmd)
-                    loop = asyncio.get_event_loop()
+                    loop = asyncio.get_running_loop()
                     await loop.run_in_executor(None, slave_pipe._write, encoded)
                     logger.info(f"Retry forwarded {cmd.type} to {cmd.slave_id} (msg_id={cmd.msg_id})")
                 else:
