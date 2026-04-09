@@ -160,7 +160,8 @@ class DatabaseManager:
         cutoff = self._now_ms() - timeout_ms
         return await self.fetch_all(
             "SELECT msg_id, master_id, type, payload, retry_count FROM messages "
-            "WHERE status = 'pending' AND ts_ms < ? AND retry_count < ?",
+            "WHERE status = 'pending' AND ts_ms < ? AND retry_count < ? "
+            "ORDER BY ts_ms ASC",
             (cutoff, max_retries),
         )
 
