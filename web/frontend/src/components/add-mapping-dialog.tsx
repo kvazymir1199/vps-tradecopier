@@ -65,7 +65,16 @@ export function AddMappingDialog({
           <DialogDescription>
             {isSymbol
               ? "Map a master symbol to a slave symbol."
-              : "Map a master setup ID to a slave setup ID."}
+              : (
+                <>
+                  Map a master setup ID to a slave setup ID.{" "}
+                  The hub replaces the last two digits of the master magic number
+                  with the slave setup ID. Example: master magic{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">15010301</code>
+                  {" "}→ slave magic{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">15010305</code>.
+                </>
+              )}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
