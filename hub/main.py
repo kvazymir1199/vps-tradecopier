@@ -57,8 +57,9 @@ class HubService:
                 if symbols:
                     await self.db.save_terminal_symbols(terminal_id, symbols)
                     logger.info(f"Saved {len(symbols)} symbols for {terminal_id}")
-                logger.info(f"REGISTER: {terminal_id} ({role}) account={account}")
-                return None
+                resume_from = await self.db.get_max_msg_id(terminal_id)
+                logger.info(f"REGISTER: {terminal_id} ({role}) account={account} resume_from={resume_from}")
+                return json.dumps({"ack_type": "ACK", "resume_from": resume_from}) + "\n"
 
             # Handle HEARTBEAT
             if msg_type == "HEARTBEAT":
@@ -209,7 +210,7 @@ class HubService:
 
         self.router = Router(self.db, self.config.resend_window_size)
         self.alert_sender = AlertSender(self.db, self.config)
-        self.health_checker = HealthChecker(self.db, self.config.heartbeat_timeout_sec)
+        self.health_checker = HealthChecker(self.db, self.config, self._resend_message)
 
         # Collect terminal IDs from links AND registered terminals
         links = await self.db.get_active_links()
@@ -237,6 +238,37 @@ class HubService:
     @staticmethod
     async def _noop_handler(raw: str) -> str | None:
         return None
+
+    async def _resend_message(self, msg: dict) -> None:
+        """Retry delivery of an unACKed message by rebuilding and re-sending slave commands."""
+        logger.info(
+            f"Retrying msg_id={msg['msg_id']} for {msg['master_id']} "
+            f"(attempt {msg['retry_count'] + 1}/{self.config.ack_max_retries})"
+        )
+        try:
+            payload = json.loads(msg["payload"])
+            master_msg = decode_master_message(json.dumps({
+                "msg_id": msg["msg_id"],
+                "master_id": msg["master_id"],
+                "type": msg["type"],
+                "ts_ms": int(time.time() * 1000),
+                "payload": payload,
+            }))
+            links = await self.db.get_active_links(msg["master_id"])
+            for link in links:
+                cmd = await self.router._build_slave_command(master_msg, link)
+                if cmd is None:
+                    continue
+                slave_pipe = self._slave_cmd_pipes.get(cmd.slave_id)
+                if slave_pipe and slave_pipe._handle:
+                    encoded = encode_slave_command(cmd)
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, slave_pipe._write, encoded)
+                    logger.info(f"Retry forwarded {cmd.type} to {cmd.slave_id} (msg_id={cmd.msg_id})")
+                else:
+                    logger.warning(f"Retry: slave {cmd.slave_id} pipe not connected for msg_id={cmd.msg_id}")
+        except Exception as e:
+            logger.error(f"_resend_message error for msg_id={msg['msg_id']}: {e}")
 
     async def _terminal_discovery_loop(self):
         """Periodically check DB for newly registered terminals and create pipes."""
