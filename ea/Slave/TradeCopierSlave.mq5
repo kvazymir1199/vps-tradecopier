@@ -40,6 +40,7 @@ CTrade             g_trade;
 
 MasterIdempotency  g_idempotency[];
 int                g_idempotencyCount;
+bool               g_idempotencyDirty;
 
 datetime           g_lastHeartbeat;
 
@@ -74,6 +75,7 @@ int OnInit()
 
    //--- Initialize idempotency tracker
    g_idempotencyCount = 0;
+   g_idempotencyDirty = false;
    ArrayResize(g_idempotency, MAX_MASTERS);
 
    //--- Restore idempotency state from previous session
@@ -115,6 +117,7 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   SaveIdempotencyState();
    EventKillTimer();
    g_cmdPipe.Disconnect();
    g_ackPipe.Disconnect();
@@ -154,6 +157,11 @@ void OnTimer()
       g_logger.Debug(StringFormat("Cmd received: %s", raw));
       ProcessCommand(raw);
       raw = g_cmdPipe.Receive();
+   }
+   if(g_idempotencyDirty)
+   {
+      SaveIdempotencyState();
+      g_idempotencyDirty = false;
    }
 
    //--- Heartbeat
@@ -223,7 +231,7 @@ void ProcessCommand(string raw)
 
    //--- Mark as processed
    RecordProcessedMessage(cmd.masterId, cmd.msgId);
-   SaveIdempotencyState();
+   g_idempotencyDirty = true;
 }
 
 //+------------------------------------------------------------------+
@@ -571,11 +579,13 @@ void LoadIdempotencyState()
 //+------------------------------------------------------------------+
 void SaveIdempotencyState()
 {
-   string filename = "copier_idem_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".csv";
-   int handle = FileOpen(filename, FILE_WRITE | FILE_CSV | FILE_ANSI, ',');
+   string filename    = "copier_idem_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".csv";
+   string tmpFilename = "copier_idem_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".tmp";
+
+   int handle = FileOpen(tmpFilename, FILE_WRITE | FILE_CSV | FILE_ANSI, ',');
    if(handle == INVALID_HANDLE)
    {
-      g_logger.Error("[Slave] Failed to open idempotency file for writing");
+      g_logger.Error("[Slave] Failed to open idempotency temp file for writing");
       return;
    }
    for(int i = 0; i < g_idempotencyCount; i++)
@@ -583,6 +593,10 @@ void SaveIdempotencyState()
       FileWrite(handle, g_idempotency[i].master_id, g_idempotency[i].last_msg_id);
    }
    FileClose(handle);
+
+   FileDelete(filename);
+   if(!FileMove(tmpFilename, 0, filename, 0))
+      g_logger.Error("[Slave] Failed to rename idempotency temp file");
 }
 
 //+------------------------------------------------------------------+
