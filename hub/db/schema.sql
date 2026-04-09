@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS messages (
     ts_ms           INTEGER NOT NULL,
     status          TEXT    NOT NULL DEFAULT 'pending'
                            CHECK (status IN ('pending', 'sent', 'acked', 'nacked', 'expired')),
+    retry_count     INTEGER NOT NULL DEFAULT 0,
 
     PRIMARY KEY (master_id, msg_id)
 );

@@ -31,6 +31,15 @@ class DatabaseManager:
             )
             await self._conn.commit()
 
+        # Migration: add retry_count column to messages
+        cursor = await self._conn.execute("PRAGMA table_info(messages)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "retry_count" not in columns:
+            await self._conn.execute(
+                "ALTER TABLE messages ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0"
+            )
+            await self._conn.commit()
+
         # Migration: recreate messages table with updated CHECK constraint
         # (adds PENDING_PLACE, PENDING_MODIFY, PENDING_DELETE types)
         # Must disable FK checks to avoid constraint failures during table rename
@@ -54,6 +63,7 @@ class DatabaseManager:
                     ts_ms    INTEGER NOT NULL,
                     status   TEXT    NOT NULL DEFAULT 'pending'
                         CHECK (status IN ('pending', 'sent', 'acked', 'nacked', 'expired')),
+                    retry_count INTEGER NOT NULL DEFAULT 0,
                     PRIMARY KEY (master_id, msg_id)
                 );
                 INSERT INTO messages SELECT * FROM messages_old;
