@@ -11,3 +11,24 @@ def parse_master_magic(magic: int) -> dict:
 
 def compute_slave_magic(master_magic: int, slave_setup_id: int) -> int:
     return master_magic - (master_magic % 100) + slave_setup_id
+
+
+def direction_allowed(direction_block: int, direction: str) -> bool:
+    """Check if the magic number's direction_block permits the given trade direction.
+
+    direction_block == 0 means the setup is unrestricted (trades both ways).
+    The encoding convention for non-zero blocks must be confirmed with the client
+    before this guard is enabled in the router.
+
+    Placeholder implementation: all non-zero blocks are also treated as unrestricted
+    until the convention is documented.
+    """
+    if not direction:
+        return True
+    if direction_block == 0:
+        return True
+    # TODO: replace with actual convention once confirmed, e.g.:
+    # if direction_block % 2 == 0:
+    #     return direction == "BUY"
+    # return direction == "SELL"
+    return True
