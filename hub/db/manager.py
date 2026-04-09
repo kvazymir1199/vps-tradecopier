@@ -149,6 +149,29 @@ class DatabaseManager:
         row = await cursor.fetchone()
         return row[0] if row else None
 
+    async def get_max_msg_id(self, master_id: str) -> int:
+        row = await self.fetch_one(
+            "SELECT MAX(msg_id) as max_id FROM messages WHERE master_id = ?",
+            (master_id,),
+        )
+        return row["max_id"] if row and row["max_id"] is not None else 0
+
+    async def get_timed_out_messages(self, timeout_ms: int, max_retries: int) -> list[dict]:
+        cutoff = self._now_ms() - timeout_ms
+        return await self.fetch_all(
+            "SELECT msg_id, master_id, type, payload, retry_count FROM messages "
+            "WHERE status = 'pending' AND ts_ms < ? AND retry_count < ?",
+            (cutoff, max_retries),
+        )
+
+    async def increment_retry(self, master_id: str, msg_id: int) -> None:
+        await self._conn.execute(
+            "UPDATE messages SET retry_count = retry_count + 1, ts_ms = ? "
+            "WHERE master_id = ? AND msg_id = ?",
+            (self._now_ms(), master_id, msg_id),
+        )
+        await self._conn.commit()
+
     async def insert_ack(
         self,
         msg_id: int,

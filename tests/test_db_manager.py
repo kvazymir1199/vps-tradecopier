@@ -157,3 +157,75 @@ async def test_purge_old_heartbeats(db):
     await db.purge_old_heartbeats(max_age_days=0)
     rows = await db.fetch_all("SELECT * FROM heartbeats")
     assert len(rows) <= 1
+
+
+@pytest.mark.asyncio
+async def test_get_max_msg_id_empty(db):
+    result = await db.get_max_msg_id("master_1")
+    assert result == 0
+
+
+@pytest.mark.asyncio
+async def test_get_max_msg_id_returns_max(db):
+    await db.insert_message(1, "master_1", "OPEN", '{"ticket":1}', 1000)
+    await db.insert_message(5, "master_1", "OPEN", '{"ticket":5}', 2000)
+    await db.insert_message(3, "master_1", "OPEN", '{"ticket":3}', 3000)
+    result = await db.get_max_msg_id("master_1")
+    assert result == 5
+
+
+@pytest.mark.asyncio
+async def test_get_max_msg_id_isolated_by_master(db):
+    await db.insert_message(10, "master_1", "OPEN", '{}', 1000)
+    await db.insert_message(2, "master_2", "OPEN", '{}', 1000)
+    assert await db.get_max_msg_id("master_1") == 10
+    assert await db.get_max_msg_id("master_2") == 2
+
+
+@pytest.mark.asyncio
+async def test_get_timed_out_messages_empty_when_fresh(db):
+    await db.insert_message(1, "master_1", "OPEN", '{}', int(time.time() * 1000))
+    result = await db.get_timed_out_messages(timeout_ms=15_000, max_retries=3)
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_get_timed_out_messages_returns_old_pending(db):
+    old_ts = int(time.time() * 1000) - 20_000
+    await db.execute(
+        "INSERT INTO messages (msg_id, master_id, type, payload, ts_ms, status, retry_count) "
+        "VALUES (1, 'master_1', 'OPEN', '{}', ?, 'pending', 0)",
+        (old_ts,),
+    )
+    result = await db.get_timed_out_messages(timeout_ms=15_000, max_retries=3)
+    assert len(result) == 1
+    assert result[0]["msg_id"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_timed_out_messages_excludes_exhausted(db):
+    old_ts = int(time.time() * 1000) - 20_000
+    await db.execute(
+        "INSERT INTO messages (msg_id, master_id, type, payload, ts_ms, status, retry_count) "
+        "VALUES (1, 'master_1', 'OPEN', '{}', ?, 'pending', 3)",
+        (old_ts,),
+    )
+    result = await db.get_timed_out_messages(timeout_ms=15_000, max_retries=3)
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_increment_retry_increments_count_and_resets_timer(db):
+    now = int(time.time() * 1000)
+    old_ts = now - 30_000
+    await db.execute(
+        "INSERT INTO messages (msg_id, master_id, type, payload, ts_ms, status, retry_count) "
+        "VALUES (1, 'master_1', 'OPEN', '{}', ?, 'pending', 0)",
+        (old_ts,),
+    )
+    await db.increment_retry("master_1", 1)
+    row = await db.fetch_one(
+        "SELECT retry_count, ts_ms FROM messages WHERE msg_id = 1 AND master_id = 'master_1'"
+    )
+    assert row["retry_count"] == 1
+    assert row["ts_ms"] >= now  # timer reset to now
