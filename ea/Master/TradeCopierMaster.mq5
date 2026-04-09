@@ -164,7 +164,7 @@ void HandleHubResponse(const string &raw)
    {
       g_msgId = resume_from;
       PersistMsgId();
-      g_logger.Info(StringFormat("[Master] resume_from=%d received from Hub — msg_id advanced", g_msgId));
+      g_logger.Info(StringFormat("resume_from=%d received from Hub — msg_id advanced", g_msgId));
    }
 }
 
