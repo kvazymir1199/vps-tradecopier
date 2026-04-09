@@ -155,6 +155,20 @@ void OnDeinit(const int reason)
 }
 
 //+------------------------------------------------------------------+
+//| HandleHubResponse — process any response received from Hub       |
+//+------------------------------------------------------------------+
+void HandleHubResponse(const string &raw)
+{
+   int resume_from = ParseResumeFrom(raw);
+   if(resume_from > g_msgId)
+   {
+      g_msgId = resume_from;
+      PersistMsgId();
+      g_logger.Info(StringFormat("[Master] resume_from=%d received from Hub — msg_id advanced", g_msgId));
+   }
+}
+
+//+------------------------------------------------------------------+
 //| OnTrade — triggered on any trade event                           |
 //+------------------------------------------------------------------+
 void OnTrade()
@@ -184,11 +198,11 @@ void OnTimer()
       g_logger.Info("Re-registered after reconnect");
    }
 
-   //--- Poll pipe for any responses (discard; master is fire-and-forget)
+   //--- Poll pipe for responses (parse resume_from on REGISTER ACK)
    string recv = g_pipe.Receive();
    while(StringLen(recv) > 0)
    {
-      g_logger.Debug(StringFormat("Received: %s", recv));
+      HandleHubResponse(recv);
       recv = g_pipe.Receive();
    }
 

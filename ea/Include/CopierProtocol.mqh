@@ -446,4 +446,16 @@ string BuildPendingDeleteMessage(int msgId, string masterId, long ticket,
    return json;
 }
 
+//+------------------------------------------------------------------+
+//| ParseResumeFrom — extract resume_from integer from Hub ACK JSON  |
+//| Returns 0 if field not present or not a valid number.            |
+//+------------------------------------------------------------------+
+int ParseResumeFrom(const string &raw)
+{
+   string val = _JsonExtractNum(raw, "resume_from");
+   if(val == "")
+      return 0;
+   return (int)StringToInteger(val);
+}
+
 #endif // COPIER_PROTOCOL_MQH
