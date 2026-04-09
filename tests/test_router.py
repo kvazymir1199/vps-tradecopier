@@ -192,3 +192,54 @@ async def test_route_pending_delete_message(router):
     cmd = commands[0]
     assert cmd.type == MessageType.PENDING_DELETE
     assert cmd.payload["magic"] == 15010305
+
+
+@pytest.mark.asyncio
+async def test_route_skips_slave_without_magic_mapping():
+    """Command must NOT be sent if no magic_mapping exists for the setup_id."""
+    db = DatabaseManager(":memory:")
+    await db.initialize()
+    await db.register_terminal("master_1", "master", 111, "B1")
+    await db.register_terminal("slave_1", "slave", 222, "B2")
+    await db.execute(
+        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, symbol_suffix, created_at) "
+        "VALUES ('master_1', 'slave_1', 1, 'multiplier', 2.0, '', 0)"
+    )
+    # Deliberately NO magic_mappings inserted
+    r = Router(db)
+    msg = MasterMessage(
+        msg_id=1, master_id="master_1", type=MessageType.OPEN, ts_ms=170,
+        payload={"ticket": 123, "symbol": "EURUSD", "direction": "BUY",
+                 "volume": 0.1, "price": 1.085, "sl": 1.082, "tp": 1.089,
+                 "magic": 15010301, "comment": ""},
+    )
+    commands = await r.route(msg)
+    assert len(commands) == 0
+    await db.close()
+
+
+@pytest.mark.asyncio
+async def test_route_uses_computed_magic_not_master_magic():
+    """When magic mapping IS present, slave_magic must be computed (not master_magic)."""
+    db = DatabaseManager(":memory:")
+    await db.initialize()
+    await db.register_terminal("master_1", "master", 111, "B1")
+    await db.register_terminal("slave_1", "slave", 222, "B2")
+    await db.execute(
+        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, symbol_suffix, created_at) "
+        "VALUES ('master_1', 'slave_1', 1, 'multiplier', 1.0, '', 0)"
+    )
+    await db.execute(
+        "INSERT INTO magic_mappings (link_id, master_setup_id, slave_setup_id) VALUES (1, 1, 7)"
+    )
+    r = Router(db)
+    msg = MasterMessage(
+        msg_id=1, master_id="master_1", type=MessageType.OPEN, ts_ms=170,
+        payload={"ticket": 123, "symbol": "EURUSD", "direction": "BUY",
+                 "volume": 0.1, "price": 1.085, "sl": 1.082, "tp": 1.089,
+                 "magic": 15010301, "comment": ""},
+    )
+    commands = await r.route(msg)
+    assert len(commands) == 1
+    assert commands[0].payload["magic"] == 15010307  # not 15010301
+    await db.close()

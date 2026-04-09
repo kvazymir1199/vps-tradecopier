@@ -2,7 +2,7 @@ from collections import deque
 
 from hub.db.manager import DatabaseManager
 from hub.protocol.models import MasterMessage, SlaveCommand, MessageType
-from hub.mapping.magic import compute_slave_magic, parse_master_magic
+from hub.mapping.magic import compute_slave_magic, parse_master_magic, direction_allowed
 from hub.mapping.symbol import resolve_symbol
 from hub.mapping.lot import compute_slave_volume, compute_partial_close_volume
 
@@ -55,12 +55,19 @@ class Router:
         explicit_mappings = await self._db.get_symbol_mappings(link["id"])
         slave_symbol = resolve_symbol(msg.payload.get("symbol", ""), link.get("symbol_suffix", ""), explicit_mappings)
 
-        # Resolve magic
+        # Resolve magic — strict whitelist: no mapping = skip this slave
         master_magic = msg.payload.get("magic", 0)
         parsed = parse_master_magic(master_magic)
         magic_map = await self._db.get_magic_mappings(link["id"])
         slave_setup_id = magic_map.get(parsed["setup_id"])
-        slave_magic = compute_slave_magic(master_magic, slave_setup_id) if slave_setup_id is not None else master_magic
+        if slave_setup_id is None:
+            return None  # no magic mapping — this slave does not copy this setup
+        slave_magic = compute_slave_magic(master_magic, slave_setup_id)
+
+        # Direction guard — only for trade messages that carry a direction
+        direction = msg.payload.get("direction", "")
+        if not direction_allowed(parsed["direction_block"], direction):
+            return None
 
         # Resolve volume
         slave_volume = compute_slave_volume(
