@@ -48,42 +48,31 @@ class HealthChecker:
 
     async def _check_ack_timeouts(self) -> list[dict]:
         timeout_ms = self._config.ack_timeout_sec * 1000
-        max_retries = self._config.ack_max_retries
         cutoff = int(time.time() * 1000) - timeout_ms
 
-        # Messages that can still be retried (retry_count < max_retries)
-        retryable = await self._db.fetch_all(
-            "SELECT msg_id, master_id, type, payload, retry_count FROM messages "
-            "WHERE status = 'pending' AND ts_ms < ? AND retry_count < ? "
-            "ORDER BY ts_ms ASC",
-            (cutoff, max_retries),
-        )
-
-        # Messages that have exhausted all retries (retry_count >= max_retries)
-        exhausted = await self._db.fetch_all(
-            "SELECT msg_id, master_id, type, payload, retry_count FROM messages "
-            "WHERE status = 'pending' AND ts_ms < ? AND retry_count >= ? "
-            "ORDER BY ts_ms ASC",
-            (cutoff, max_retries),
-        )
-
-        alerts = []
-
+        # Retryable messages: retry_count < max_retries
+        retryable = await self._db.get_timed_out_messages(timeout_ms, self._config.ack_max_retries)
         for msg in retryable:
             await self._db.increment_retry(msg["master_id"], msg["msg_id"])
             await self._resend_callback(msg)
 
+        # Exhausted messages: retry_count >= max_retries — expire and alert
+        exhausted = await self._db.fetch_all(
+            "SELECT msg_id, master_id FROM messages "
+            "WHERE status = 'pending' AND ts_ms < ? AND retry_count >= ?",
+            (cutoff, self._config.ack_max_retries),
+        )
+        alerts = []
         for msg in exhausted:
             await self._db.update_message_status(msg["msg_id"], msg["master_id"], "expired")
             alerts.append({
                 "alert_type": "ack_timeout",
                 "terminal_id": msg["master_id"],
                 "message": (
-                    f"ACK exhausted after {max_retries} retries "
+                    f"ACK exhausted after {self._config.ack_max_retries} retries "
                     f"for msg_id={msg['msg_id']} from {msg['master_id']}"
                 ),
             })
-
         return alerts
 
     async def _check_consecutive_nacks(self) -> list[dict]:
