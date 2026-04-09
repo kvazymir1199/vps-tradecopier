@@ -76,6 +76,9 @@ int OnInit()
    g_idempotencyCount = 0;
    ArrayResize(g_idempotency, MAX_MASTERS);
 
+   //--- Restore idempotency state from previous session
+   LoadIdempotencyState();
+
    //--- Register in shared SQLite DB so Hub discovers us
    if(!RegisterTerminalInDB(g_terminalId, "slave", g_dbFile))
       g_logger.Error("DB registration failed — Hub won't auto-create pipe");
@@ -220,6 +223,7 @@ void ProcessCommand(string raw)
 
    //--- Mark as processed
    RecordProcessedMessage(cmd.masterId, cmd.msgId);
+   SaveIdempotencyState();
 }
 
 //+------------------------------------------------------------------+
@@ -530,6 +534,55 @@ void RecordProcessedMessage(string masterId, int msgId)
    {
       g_logger.Error(StringFormat("Idempotency table full (max %d masters)", MAX_MASTERS));
    }
+}
+
+//+------------------------------------------------------------------+
+//| LoadIdempotencyState — restore last_msg_id per master from file  |
+//| File: MQL5/Files/copier_idem_<account>.csv                       |
+//| Format per line: master_id,last_msg_id                           |
+//+------------------------------------------------------------------+
+void LoadIdempotencyState()
+{
+   string filename = "copier_idem_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".csv";
+   int handle = FileOpen(filename, FILE_READ | FILE_CSV | FILE_ANSI, ',');
+   if(handle == INVALID_HANDLE)
+   {
+      g_logger.Info("[Slave] No idempotency file found — starting fresh");
+      return;
+   }
+   int loaded = 0;
+   while(!FileIsEnding(handle))
+   {
+      string master_id = FileReadString(handle);
+      if(FileIsEnding(handle)) break;  // guard against trailing newline
+      int last_id = (int)FileReadNumber(handle);
+      if(master_id != "")
+      {
+         RecordProcessedMessage(master_id, last_id);
+         loaded++;
+      }
+   }
+   FileClose(handle);
+   g_logger.Info(StringFormat("[Slave] Loaded idempotency state: %d masters", loaded));
+}
+
+//+------------------------------------------------------------------+
+//| SaveIdempotencyState — persist current idempotency table to file |
+//+------------------------------------------------------------------+
+void SaveIdempotencyState()
+{
+   string filename = "copier_idem_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".csv";
+   int handle = FileOpen(filename, FILE_WRITE | FILE_CSV | FILE_ANSI, ',');
+   if(handle == INVALID_HANDLE)
+   {
+      g_logger.Error("[Slave] Failed to open idempotency file for writing");
+      return;
+   }
+   for(int i = 0; i < g_idempotencyCount; i++)
+   {
+      FileWrite(handle, g_idempotency[i].master_id, g_idempotency[i].last_msg_id);
+   }
+   FileClose(handle);
 }
 
 //+------------------------------------------------------------------+
