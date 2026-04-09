@@ -1,16 +1,24 @@
 import time
 import logging
-from pathlib import Path
+from collections.abc import Callable, Awaitable
 
 from hub.db.manager import DatabaseManager
+from hub.config import Config
 
 logger = logging.getLogger(__name__)
 
 
 class HealthChecker:
-    def __init__(self, db: DatabaseManager, heartbeat_timeout_sec: int = 30):
+    def __init__(
+        self,
+        db: DatabaseManager,
+        config: Config,
+        resend_callback: Callable[[dict], Awaitable[None]],
+    ):
         self._db = db
-        self._heartbeat_timeout_ms = heartbeat_timeout_sec * 1000
+        self._config = config
+        self._resend_callback = resend_callback
+        self._heartbeat_timeout_ms = config.heartbeat_timeout_sec * 1000
 
     async def run_checks(self) -> list[dict]:
         alerts = []
@@ -39,20 +47,43 @@ class HealthChecker:
         return alerts
 
     async def _check_ack_timeouts(self) -> list[dict]:
-        now = int(time.time() * 1000)
-        cutoff = now - 15_000  # 15 seconds
-        rows = await self._db.fetch_all(
-            "SELECT msg_id, master_id, ts_ms FROM messages "
-            "WHERE status = 'pending' AND ts_ms < ?",
-            (cutoff,),
+        timeout_ms = self._config.ack_timeout_sec * 1000
+        max_retries = self._config.ack_max_retries
+        cutoff = int(time.time() * 1000) - timeout_ms
+
+        # Messages that can still be retried (retry_count < max_retries)
+        retryable = await self._db.fetch_all(
+            "SELECT msg_id, master_id, type, payload, retry_count FROM messages "
+            "WHERE status = 'pending' AND ts_ms < ? AND retry_count < ? "
+            "ORDER BY ts_ms ASC",
+            (cutoff, max_retries),
         )
+
+        # Messages that have exhausted all retries (retry_count >= max_retries)
+        exhausted = await self._db.fetch_all(
+            "SELECT msg_id, master_id, type, payload, retry_count FROM messages "
+            "WHERE status = 'pending' AND ts_ms < ? AND retry_count >= ? "
+            "ORDER BY ts_ms ASC",
+            (cutoff, max_retries),
+        )
+
         alerts = []
-        for r in rows:
+
+        for msg in retryable:
+            await self._db.increment_retry(msg["master_id"], msg["msg_id"])
+            await self._resend_callback(msg)
+
+        for msg in exhausted:
+            await self._db.update_message_status(msg["msg_id"], msg["master_id"], "expired")
             alerts.append({
                 "alert_type": "ack_timeout",
-                "terminal_id": r["master_id"],
-                "message": f"ACK timeout for msg_id={r['msg_id']} from {r['master_id']}",
+                "terminal_id": msg["master_id"],
+                "message": (
+                    f"ACK exhausted after {max_retries} retries "
+                    f"for msg_id={msg['msg_id']} from {msg['master_id']}"
+                ),
             })
+
         return alerts
 
     async def _check_consecutive_nacks(self) -> list[dict]:
