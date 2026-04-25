@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from collections.abc import Callable, Awaitable
 
 import win32pipe
@@ -10,6 +11,7 @@ import pywintypes
 logger = logging.getLogger(__name__)
 
 PIPE_BUFFER_SIZE = 4096
+PIPE_POLL_INTERVAL_SEC = 0.05  # 50 ms — balance between latency and CPU
 
 
 class PipeServer:
@@ -91,14 +93,27 @@ class PipeServer:
             while self._running:
                 data = await loop.run_in_executor(None, self._read_from, handle)
                 if data is None:
-                    break
+                    break  # pipe broken — exit the serve loop
+                if data == "":
+                    # No data yet — pipe healthy. Yield control so other tasks run.
+                    await asyncio.sleep(PIPE_POLL_INTERVAL_SEC)
+                    continue
                 buffer += data
                 while "\n" in buffer:
                     line, buffer = buffer.split("\n", 1)
-                    if line.strip():
-                        response = await self._on_message(line)
-                        if response:
-                            await loop.run_in_executor(None, self._write_to, handle, response)
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                    # Fire-and-forget for HEARTBEAT — it writes symbols to the DB,
+                    # and we must not let that block trade-message routing on the
+                    # same pipe. Trade messages (OPEN/CLOSE/MODIFY) and REGISTER
+                    # stay synchronous so their response order is preserved.
+                    if '"type":"HEARTBEAT"' in stripped[:60]:
+                        asyncio.create_task(self._on_message(stripped))
+                        continue
+                    response = await self._on_message(stripped)
+                    if response:
+                        await loop.run_in_executor(None, self._write_to, handle, response)
         except Exception as e:
             logger.error(f"Pipe {self._pipe_name} client error: {e}")
         finally:
@@ -143,8 +158,29 @@ class PipeServer:
 
     @staticmethod
     def _read_from(handle) -> str | None:
+        """Non-blocking read with PeekNamedPipe.
+
+        Returns:
+            str with data — data was read successfully
+            ""             — pipe is healthy but nothing to read yet (caller sleeps)
+            None           — pipe is broken/closed (caller exits the serve loop)
+
+        This avoids ReadFile() blocking the executor thread forever on a
+        half-closed pipe handle. Such stuck threads previously froze the
+        entire event loop when multiple clients reconnected rapidly.
+        """
         try:
-            hr, data = win32file.ReadFile(handle, PIPE_BUFFER_SIZE)
+            # Peek first to check pipe state and available bytes — this call
+            # returns immediately and raises on a broken pipe.
+            _, bytes_avail, _ = win32pipe.PeekNamedPipe(handle, 0)
+        except pywintypes.error:
+            return None  # pipe broken
+
+        if bytes_avail == 0:
+            return ""  # healthy but empty
+
+        try:
+            _, data = win32file.ReadFile(handle, PIPE_BUFFER_SIZE)
             return data.decode("utf-8")
         except pywintypes.error:
             return None

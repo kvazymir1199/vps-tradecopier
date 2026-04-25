@@ -59,14 +59,15 @@ class Router:
         master_magic = msg.payload.get("magic", 0)
         parsed = parse_master_magic(master_magic)
         magic_map = await self._db.get_magic_mappings(link["id"])
-        slave_setup_id = magic_map.get(parsed["setup_id"])
-        if slave_setup_id is None:
+        mapping = magic_map.get(parsed["setup_id"])
+        if mapping is None:
             return None  # no magic mapping — this slave does not copy this setup
+        slave_setup_id = mapping["slave_setup_id"]
         slave_magic = compute_slave_magic(master_magic, slave_setup_id)
 
         # Direction guard — only for trade messages that carry a direction
         direction = msg.payload.get("direction", "")
-        if not direction_allowed(parsed["direction_block"], direction):
+        if not direction_allowed(mapping["allowed_direction"], direction):
             return None
 
         # Resolve volume

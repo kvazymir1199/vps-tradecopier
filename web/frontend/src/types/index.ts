@@ -25,11 +25,14 @@ export interface SymbolMapping {
   slave_symbol: string;
 }
 
+export type AllowedDirection = "BUY" | "SELL" | "BOTH";
+
 export interface MagicMapping {
   id: number;
   link_id: number;
   master_setup_id: number;
   slave_setup_id: number;
+  allowed_direction: AllowedDirection;
 }
 
 export interface SymbolSuggestion {

@@ -20,13 +20,24 @@ def test_compute_slave_magic_setup_99():
     result = compute_slave_magic(15010301, slave_setup_id=99)
     assert result == 15010399
 
-def test_direction_allowed_zero_is_unrestricted():
-    assert direction_allowed(0, "BUY") is True
-    assert direction_allowed(0, "SELL") is True
+def test_direction_allowed_both_permits_any():
+    assert direction_allowed("BOTH", "BUY") is True
+    assert direction_allowed("BOTH", "SELL") is True
+
+def test_direction_allowed_buy_only_permits_buy():
+    assert direction_allowed("BUY", "BUY") is True
+
+def test_direction_allowed_buy_only_blocks_sell():
+    assert direction_allowed("BUY", "SELL") is False
+
+def test_direction_allowed_sell_only_permits_sell():
+    assert direction_allowed("SELL", "SELL") is True
+
+def test_direction_allowed_sell_only_blocks_buy():
+    assert direction_allowed("SELL", "BUY") is False
 
 def test_direction_allowed_empty_direction_passes():
-    assert direction_allowed(3, "") is True
-
-def test_direction_allowed_returns_bool():
-    result = direction_allowed(3, "BUY")
-    assert isinstance(result, bool)
+    # CLOSE / MODIFY / SLTP payloads carry no direction — guard is a no-op
+    assert direction_allowed("BUY", "") is True
+    assert direction_allowed("SELL", "") is True
+    assert direction_allowed("BOTH", "") is True

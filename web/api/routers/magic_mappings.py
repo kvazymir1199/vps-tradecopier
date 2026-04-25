@@ -47,9 +47,10 @@ async def create_magic_mapping(link_id: int, body: MagicMappingCreate):
             )
 
         cursor = await db.execute(
-            """INSERT INTO magic_mappings (link_id, master_setup_id, slave_setup_id)
-               VALUES (?, ?, ?)""",
-            (link_id, body.master_setup_id, body.slave_setup_id),
+            """INSERT INTO magic_mappings
+               (link_id, master_setup_id, slave_setup_id, allowed_direction)
+               VALUES (?, ?, ?, ?)""",
+            (link_id, body.master_setup_id, body.slave_setup_id, body.allowed_direction),
         )
         await db.commit()
         mapping_id = cursor.lastrowid

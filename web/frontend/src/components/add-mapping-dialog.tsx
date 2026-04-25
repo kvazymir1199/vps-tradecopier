@@ -11,12 +11,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { AllowedDirection } from "@/types";
 
 interface AddMappingDialogProps {
   type: "symbol" | "magic";
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (field1: string, field2: string) => Promise<void>;
+  onSubmit: (field1: string, field2: string, field3?: string) => Promise<void>;
 }
 
 export function AddMappingDialog({
@@ -27,6 +35,7 @@ export function AddMappingDialog({
 }: AddMappingDialogProps) {
   const [field1, setField1] = useState("");
   const [field2, setField2] = useState("");
+  const [direction, setDirection] = useState<AllowedDirection>("BOTH");
   const [submitting, setSubmitting] = useState(false);
 
   const isSymbol = type === "symbol";
@@ -35,12 +44,17 @@ export function AddMappingDialog({
   const placeholder1 = isSymbol ? "e.g. EURUSD" : "e.g. 1001";
   const placeholder2 = isSymbol ? "e.g. EURUSD.raw" : "e.g. 2001";
 
+  const resetFields = () => {
+    setField1("");
+    setField2("");
+    setDirection("BOTH");
+  };
+
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      await onSubmit(field1, field2);
-      setField1("");
-      setField2("");
+      await onSubmit(field1, field2, isSymbol ? undefined : direction);
+      resetFields();
       onOpenChange(false);
     } finally {
       setSubmitting(false);
@@ -49,8 +63,7 @@ export function AddMappingDialog({
 
   const handleOpenChange = (value: boolean) => {
     if (!value) {
-      setField1("");
-      setField2("");
+      resetFields();
     }
     onOpenChange(value);
   };
@@ -96,6 +109,27 @@ export function AddMappingDialog({
               onChange={(e) => setField2(e.target.value)}
             />
           </div>
+          {!isSymbol && (
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Allowed Direction</label>
+              <Select
+                value={direction}
+                onValueChange={(val) => setDirection(val as AllowedDirection)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="BOTH">Both (BUY + SELL)</SelectItem>
+                  <SelectItem value="BUY">BUY only</SelectItem>
+                  <SelectItem value="SELL">SELL only</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Restricts which trade directions this slave copies for this setup.
+              </p>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)}>

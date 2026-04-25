@@ -160,6 +160,9 @@ class HubService:
                     ack.ack_type, ack.reason, ack.slave_ticket,
                     ack.ts_ms,
                 )
+                # Mark the message as terminal so the retry loop stops selecting it.
+                new_status = "acked" if ack.ack_type == "ACK" else "nacked"
+                await self.db.update_message_status(ack.msg_id, master_id, new_status)
             else:
                 logger.warning(f"ACK msg_id={ack.msg_id} has no matching message, skipping")
 

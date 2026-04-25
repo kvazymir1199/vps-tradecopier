@@ -131,9 +131,12 @@ int OnInit()
       PersistMsgId();
    }
 
-   //--- Do initial scan so we have baseline
-   ScanPositions();
-   ScanOrders();
+   //--- Seed tracked arrays with currently-open positions/orders WITHOUT
+   //--- emitting OPEN/PENDING_PLACE. Otherwise every EA reload (or chart
+   //--- reattach) would make Slave re-open copies of positions that are
+   //--- already mirrored — duplicating client exposure.
+   SeedTrackedPositions();
+   SeedTrackedOrders();
 
    //--- Start 100ms timer
    g_lastHeartbeat = TimeLocal();
@@ -183,6 +186,7 @@ void OnTrade()
 void OnTimer()
 {
    //--- Ensure pipe is connected
+   bool justReconnected = false;
    if(!g_pipe.IsConnected())
    {
       if(!g_pipe.Connect(g_pipeName, true))
@@ -196,6 +200,16 @@ void OnTimer()
       g_pipe.Send(regMsg);
       PersistMsgId();
       g_logger.Info("Re-registered after reconnect");
+      justReconnected = true;
+   }
+
+   //--- Force a scan right after (re)connect so any position changes that
+   //--- happened while the pipe was down are forwarded now (e.g. CLOSE of
+   //--- a position the trader closed manually while the EA was unattached).
+   if(justReconnected)
+   {
+      ScanPositions();
+      ScanOrders();
    }
 
    //--- Poll pipe for responses (parse resume_from on REGISTER ACK)
@@ -224,6 +238,94 @@ void OnTimer()
 
       g_lastHeartbeat = TimeLocal();
    }
+}
+
+//+------------------------------------------------------------------+
+//| SeedTrackedPositions — populate g_positions snapshot WITHOUT      |
+//| emitting any OPEN messages. Called ONCE at OnInit so existing     |
+//| positions are not re-copied to the Slave on every EA reload.      |
+//+------------------------------------------------------------------+
+void SeedTrackedPositions()
+{
+   int totalPositions = PositionsTotal();
+   ArrayResize(g_positions, totalPositions);
+   int curCount = 0;
+
+   for(int i = 0; i < totalPositions; i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+
+      long magic = (long)PositionGetInteger(POSITION_MAGIC);
+      if(InpMagicMin != 0 || InpMagicMax != 0)
+      {
+         if(magic < InpMagicMin || magic >= InpMagicMax)
+            continue;
+      }
+
+      TrackedPosition pos;
+      pos.ticket    = (long)ticket;
+      pos.magic     = magic;
+      pos.symbol    = PositionGetString(POSITION_SYMBOL);
+      pos.direction = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+      pos.volume    = PositionGetDouble(POSITION_VOLUME);
+      pos.sl        = PositionGetDouble(POSITION_SL);
+      pos.tp        = PositionGetDouble(POSITION_TP);
+
+      g_positions[curCount] = pos;
+      curCount++;
+   }
+   ArrayResize(g_positions, curCount);
+   g_posCount = curCount;
+
+   g_logger.Info(StringFormat("Seeded %d existing positions (no OPEN emitted)", curCount));
+}
+
+//+------------------------------------------------------------------+
+//| SeedTrackedOrders — populate g_orders snapshot WITHOUT emitting   |
+//| any PENDING_PLACE messages. Companion to SeedTrackedPositions.    |
+//+------------------------------------------------------------------+
+void SeedTrackedOrders()
+{
+   int totalOrders = OrdersTotal();
+   ArrayResize(g_orders, totalOrders);
+   int curCount = 0;
+
+   for(int i = 0; i < totalOrders; i++)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0)
+         continue;
+
+      ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+      if(!IsPendingOrderType(type))
+         continue;
+
+      long magic = (long)OrderGetInteger(ORDER_MAGIC);
+      if(InpMagicMin != 0 || InpMagicMax != 0)
+      {
+         if(magic < InpMagicMin || magic >= InpMagicMax)
+            continue;
+      }
+
+      TrackedOrder ord;
+      ord.ticket    = (long)ticket;
+      ord.magic     = magic;
+      ord.symbol    = OrderGetString(ORDER_SYMBOL);
+      ord.orderType = OrderTypeToString(type);
+      ord.volume    = OrderGetDouble(ORDER_VOLUME_CURRENT);
+      ord.price     = OrderGetDouble(ORDER_PRICE_OPEN);
+      ord.sl        = OrderGetDouble(ORDER_SL);
+      ord.tp        = OrderGetDouble(ORDER_TP);
+
+      g_orders[curCount] = ord;
+      curCount++;
+   }
+   ArrayResize(g_orders, curCount);
+   g_orderCount = curCount;
+
+   g_logger.Info(StringFormat("Seeded %d existing pending orders (no PENDING_PLACE emitted)", curCount));
 }
 
 //+------------------------------------------------------------------+
@@ -337,6 +439,13 @@ void ScanPositions()
    }
 
    //--- Detect CLOSED positions (in tracked but not in current)
+   //--- If Send fails (pipe down), KEEP the position in tracked so the
+   //--- next scan retries the CLOSE. Losing a CLOSE is the worst outcome
+   //--- for trading safety — the Slave would hold an uncleared position.
+   TrackedPosition pendingCloses[];
+   int pendingCount = 0;
+   ArrayResize(pendingCloses, g_posCount);
+
    for(int t = 0; t < g_posCount; t++)
    {
       bool found = false;
@@ -356,20 +465,31 @@ void ScanPositions()
                                         g_positions[t].ticket,
                                         g_positions[t].magic);
          if(g_pipe.Send(msg))
+         {
             g_logger.Info(StringFormat("CLOSE sent: ticket=%d magic=%d",
                                        g_positions[t].ticket, g_positions[t].magic));
+         }
          else
-            g_logger.Error(StringFormat("CLOSE send failed: ticket=%d", g_positions[t].ticket));
+         {
+            g_logger.Error(StringFormat("CLOSE send failed: ticket=%d — retaining tracked for retry",
+                                        g_positions[t].ticket));
+            pendingCloses[pendingCount] = g_positions[t];
+            pendingCount++;
+         }
 
          PersistMsgId();
       }
    }
+   ArrayResize(pendingCloses, pendingCount);
 
-   //--- Update tracked array with current snapshot
-   g_posCount = curCount;
-   ArrayResize(g_positions, curCount);
+   //--- Update tracked array: current snapshot + any CLOSE that failed to send
+   int newTotal = curCount + pendingCount;
+   ArrayResize(g_positions, newTotal);
    for(int i = 0; i < curCount; i++)
       g_positions[i] = current[i];
+   for(int i = 0; i < pendingCount; i++)
+      g_positions[curCount + i] = pendingCloses[i];
+   g_posCount = newTotal;
 }
 
 //+------------------------------------------------------------------+
@@ -554,6 +674,11 @@ void ScanOrders()
    }
 
    //--- Detect DELETED/ACTIVATED pending orders (in tracked but not in current)
+   //--- If Send fails, KEEP the order in tracked so next scan retries DELETE.
+   TrackedOrder pendingDeletes[];
+   int pendingCount = 0;
+   ArrayResize(pendingDeletes, g_orderCount);
+
    for(int t = 0; t < g_orderCount; t++)
    {
       bool found = false;
@@ -578,19 +703,30 @@ void ScanOrders()
 
          string reason = PositionExistsWithMagic(g_orders[t].magic) ? "activated" : "deleted";
          if(g_pipe.Send(msg))
+         {
             g_logger.Info(StringFormat("PENDING_DELETE sent: ticket=%d magic=%d (%s)",
                                        g_orders[t].ticket, g_orders[t].magic, reason));
+         }
          else
-            g_logger.Error(StringFormat("PENDING_DELETE send failed: ticket=%d", g_orders[t].ticket));
+         {
+            g_logger.Error(StringFormat("PENDING_DELETE send failed: ticket=%d — retaining tracked for retry",
+                                        g_orders[t].ticket));
+            pendingDeletes[pendingCount] = g_orders[t];
+            pendingCount++;
+         }
 
          PersistMsgId();
       }
    }
+   ArrayResize(pendingDeletes, pendingCount);
 
-   //--- Update tracked array with current snapshot
-   g_orderCount = curCount;
-   ArrayResize(g_orders, curCount);
+   //--- Update tracked array: current snapshot + any DELETE that failed to send
+   int newTotal = curCount + pendingCount;
+   ArrayResize(g_orders, newTotal);
    for(int i = 0; i < curCount; i++)
       g_orders[i] = current[i];
+   for(int i = 0; i < pendingCount; i++)
+      g_orders[curCount + i] = pendingDeletes[i];
+   g_orderCount = newTotal;
 }
 //+------------------------------------------------------------------+

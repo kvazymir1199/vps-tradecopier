@@ -56,10 +56,12 @@ CREATE INDEX IF NOT EXISTS idx_sym_master ON symbol_mappings(master_symbol);
 
 -- 4. magic_mappings
 CREATE TABLE IF NOT EXISTS magic_mappings (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    link_id           INTEGER NOT NULL REFERENCES master_slave_links(id) ON DELETE CASCADE,
-    master_setup_id   INTEGER NOT NULL,
-    slave_setup_id    INTEGER NOT NULL,
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    link_id            INTEGER NOT NULL REFERENCES master_slave_links(id) ON DELETE CASCADE,
+    master_setup_id    INTEGER NOT NULL,
+    slave_setup_id     INTEGER NOT NULL,
+    allowed_direction  TEXT    NOT NULL DEFAULT 'BOTH'
+                              CHECK (allowed_direction IN ('BUY', 'SELL', 'BOTH')),
 
     UNIQUE(link_id, master_setup_id)
 );

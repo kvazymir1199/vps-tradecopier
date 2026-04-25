@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { fetchApi } from "@/lib/api";
 import { useMappings } from "@/hooks/use-mappings";
-import { SymbolSuggestionsResponse } from "@/types";
+import { SymbolSuggestionsResponse, AllowedDirection } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -159,10 +159,15 @@ export function MappingsPanel({ linkId, open, onOpenChange }: MappingsPanelProps
 
   const handleAddMagic = async (
     masterSetupId: string,
-    slaveSetupId: string
+    slaveSetupId: string,
+    allowedDirection?: string,
   ) => {
     try {
-      await addMagicMapping(parseInt(masterSetupId), parseInt(slaveSetupId));
+      await addMagicMapping(
+        parseInt(masterSetupId),
+        parseInt(slaveSetupId),
+        (allowedDirection as AllowedDirection) ?? "BOTH",
+      );
       toast.success("Magic mapping added");
     } catch (err) {
       toast.error(
@@ -323,6 +328,7 @@ export function MappingsPanel({ linkId, open, onOpenChange }: MappingsPanelProps
                 <TableRow>
                   <TableHead>Master Setup ID</TableHead>
                   <TableHead>Slave Setup ID</TableHead>
+                  <TableHead className="w-24">Direction</TableHead>
                   <TableHead className="w-20">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -330,28 +336,42 @@ export function MappingsPanel({ linkId, open, onOpenChange }: MappingsPanelProps
                 {magicMappings.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={3}
+                      colSpan={4}
                       className="text-center text-muted-foreground"
                     >
                       No magic mappings
                     </TableCell>
                   </TableRow>
                 ) : (
-                  magicMappings.map((m) => (
-                    <TableRow key={m.id}>
-                      <TableCell>{m.master_setup_id}</TableCell>
-                      <TableCell>{m.slave_setup_id}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="destructive"
-                          size="xs"
-                          onClick={() => handleDeleteMagic(m.id)}
-                        >
-                          Delete
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  magicMappings.map((m) => {
+                    const dir = m.allowed_direction;
+                    const dirClass =
+                      dir === "BUY"
+                        ? "text-green-600"
+                        : dir === "SELL"
+                          ? "text-red-600"
+                          : "text-muted-foreground";
+                    return (
+                      <TableRow key={m.id}>
+                        <TableCell>{m.master_setup_id}</TableCell>
+                        <TableCell>{m.slave_setup_id}</TableCell>
+                        <TableCell>
+                          <span className={`font-mono text-xs font-medium ${dirClass}`}>
+                            {dir}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="destructive"
+                            size="xs"
+                            onClick={() => handleDeleteMagic(m.id)}
+                          >
+                            Delete
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>

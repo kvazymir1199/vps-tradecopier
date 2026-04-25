@@ -243,3 +243,82 @@ async def test_route_uses_computed_magic_not_master_magic():
     assert len(commands) == 1
     assert commands[0].payload["magic"] == 15010307  # not 15010301
     await db.close()
+
+
+@pytest.mark.asyncio
+async def test_route_open_blocked_by_allowed_direction_mismatch():
+    """OPEN with direction=BUY must be blocked when mapping's allowed_direction=SELL."""
+    db = DatabaseManager(":memory:")
+    await db.initialize()
+    await db.register_terminal("master_1", "master", 111, "B1")
+    await db.register_terminal("slave_1", "slave", 222, "B2")
+    await db.execute(
+        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, symbol_suffix, created_at) "
+        "VALUES ('master_1', 'slave_1', 1, 'multiplier', 1.0, '', 0)"
+    )
+    await db.execute(
+        "INSERT INTO magic_mappings (link_id, master_setup_id, slave_setup_id, allowed_direction) "
+        "VALUES (1, 1, 5, 'SELL')"
+    )
+    r = Router(db)
+    msg = MasterMessage(
+        msg_id=1, master_id="master_1", type=MessageType.OPEN, ts_ms=170,
+        payload={"ticket": 123, "symbol": "EURUSD", "direction": "BUY",
+                 "volume": 0.1, "price": 1.085, "sl": 1.082, "tp": 1.089,
+                 "magic": 15010301, "comment": ""},
+    )
+    commands = await r.route(msg)
+    assert len(commands) == 0
+    await db.close()
+
+
+@pytest.mark.asyncio
+async def test_route_open_allowed_when_direction_matches():
+    """OPEN with direction=BUY must pass when mapping's allowed_direction=BUY."""
+    db = DatabaseManager(":memory:")
+    await db.initialize()
+    await db.register_terminal("master_1", "master", 111, "B1")
+    await db.register_terminal("slave_1", "slave", 222, "B2")
+    await db.execute(
+        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, symbol_suffix, created_at) "
+        "VALUES ('master_1', 'slave_1', 1, 'multiplier', 1.0, '', 0)"
+    )
+    await db.execute(
+        "INSERT INTO magic_mappings (link_id, master_setup_id, slave_setup_id, allowed_direction) "
+        "VALUES (1, 1, 5, 'BUY')"
+    )
+    r = Router(db)
+    msg = MasterMessage(
+        msg_id=1, master_id="master_1", type=MessageType.OPEN, ts_ms=170,
+        payload={"ticket": 123, "symbol": "EURUSD", "direction": "BUY",
+                 "volume": 0.1, "price": 1.085, "sl": 1.082, "tp": 1.089,
+                 "magic": 15010301, "comment": ""},
+    )
+    commands = await r.route(msg)
+    assert len(commands) == 1
+    await db.close()
+
+
+@pytest.mark.asyncio
+async def test_route_close_passes_regardless_of_allowed_direction():
+    """CLOSE/MODIFY carry no direction — must pass even when allowed_direction is restricted."""
+    db = DatabaseManager(":memory:")
+    await db.initialize()
+    await db.register_terminal("master_1", "master", 111, "B1")
+    await db.register_terminal("slave_1", "slave", 222, "B2")
+    await db.execute(
+        "INSERT INTO master_slave_links (master_id, slave_id, enabled, lot_mode, lot_value, symbol_suffix, created_at) "
+        "VALUES ('master_1', 'slave_1', 1, 'multiplier', 1.0, '', 0)"
+    )
+    await db.execute(
+        "INSERT INTO magic_mappings (link_id, master_setup_id, slave_setup_id, allowed_direction) "
+        "VALUES (1, 1, 5, 'BUY')"
+    )
+    r = Router(db)
+    msg = MasterMessage(
+        msg_id=1, master_id="master_1", type=MessageType.CLOSE, ts_ms=170,
+        payload={"ticket": 123, "magic": 15010301},
+    )
+    commands = await r.route(msg)
+    assert len(commands) == 1
+    await db.close()

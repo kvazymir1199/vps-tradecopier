@@ -130,6 +130,31 @@ async def test_create_magic_mapping(client):
     assert data["link_id"] == 1
     assert data["master_setup_id"] == 100
     assert data["slave_setup_id"] == 200
+    assert data["allowed_direction"] == "BOTH"
+
+
+@pytest.mark.asyncio
+async def test_create_magic_mapping_with_direction(client):
+    resp = await client.post("/api/links/1/magic-mappings", json={
+        "master_setup_id": 100,
+        "slave_setup_id": 200,
+        "allowed_direction": "BUY",
+    })
+    assert resp.status_code == 201
+    assert resp.json()["allowed_direction"] == "BUY"
+
+    resp = await client.get("/api/links/1/magic-mappings")
+    assert resp.json()[0]["allowed_direction"] == "BUY"
+
+
+@pytest.mark.asyncio
+async def test_create_magic_mapping_rejects_invalid_direction(client):
+    resp = await client.post("/api/links/1/magic-mappings", json={
+        "master_setup_id": 100,
+        "slave_setup_id": 200,
+        "allowed_direction": "LONG",  # not in the Literal set
+    })
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio

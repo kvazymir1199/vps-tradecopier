@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { fetchApi } from "@/lib/api";
-import { SymbolMapping, MagicMapping } from "@/types";
+import { SymbolMapping, MagicMapping, AllowedDirection } from "@/types";
 
 export function useMappings(linkId: number | null) {
   const [symbolMappings, setSymbolMappings] = useState<SymbolMapping[]>([]);
@@ -38,10 +38,18 @@ export function useMappings(linkId: number | null) {
     await refresh();
   };
 
-  const addMagicMapping = async (masterSetupId: number, slaveSetupId: number) => {
+  const addMagicMapping = async (
+    masterSetupId: number,
+    slaveSetupId: number,
+    allowedDirection: AllowedDirection = "BOTH",
+  ) => {
     await fetchApi(`/links/${linkId}/magic-mappings`, {
       method: "POST",
-      body: JSON.stringify({ master_setup_id: masterSetupId, slave_setup_id: slaveSetupId }),
+      body: JSON.stringify({
+        master_setup_id: masterSetupId,
+        slave_setup_id: slaveSetupId,
+        allowed_direction: allowedDirection,
+      }),
     });
     await refresh();
   };

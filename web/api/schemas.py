@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
 
 
 # ── Terminals ──────────────────────────────────────────────────────
@@ -65,6 +65,7 @@ class SymbolMappingOut(BaseModel):
 class MagicMappingCreate(BaseModel):
     master_setup_id: int
     slave_setup_id: int
+    allowed_direction: Literal["BUY", "SELL", "BOTH"] = "BOTH"
 
 
 class MagicMappingOut(BaseModel):
@@ -72,6 +73,7 @@ class MagicMappingOut(BaseModel):
     link_id: int
     master_setup_id: int
     slave_setup_id: int
+    allowed_direction: Literal["BUY", "SELL", "BOTH"]
 
 
 # ── Config ────────────────────────────────────────────────────────

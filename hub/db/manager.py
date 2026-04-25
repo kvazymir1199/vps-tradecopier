@@ -40,6 +40,16 @@ class DatabaseManager:
             )
             await self._conn.commit()
 
+        # Migration: add allowed_direction column to magic_mappings
+        cursor = await self._conn.execute("PRAGMA table_info(magic_mappings)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "allowed_direction" not in columns:
+            await self._conn.execute(
+                "ALTER TABLE magic_mappings "
+                "ADD COLUMN allowed_direction TEXT NOT NULL DEFAULT 'BOTH'"
+            )
+            await self._conn.commit()
+
         # Migration: recreate messages table with updated CHECK constraint
         # (adds PENDING_PLACE, PENDING_MODIFY, PENDING_DELETE types)
         # Must disable FK checks to avoid constraint failures during table rename
@@ -255,12 +265,19 @@ class DatabaseManager:
         )
         return {r["master_symbol"]: r["slave_symbol"] for r in rows}
 
-    async def get_magic_mappings(self, link_id: int) -> dict[int, int]:
+    async def get_magic_mappings(self, link_id: int) -> dict[int, dict]:
         rows = await self.fetch_all(
-            "SELECT master_setup_id, slave_setup_id FROM magic_mappings WHERE link_id = ?",
+            "SELECT master_setup_id, slave_setup_id, allowed_direction "
+            "FROM magic_mappings WHERE link_id = ?",
             (link_id,),
         )
-        return {r["master_setup_id"]: r["slave_setup_id"] for r in rows}
+        return {
+            r["master_setup_id"]: {
+                "slave_setup_id": r["slave_setup_id"],
+                "allowed_direction": r["allowed_direction"],
+            }
+            for r in rows
+        }
 
     async def insert_heartbeat(
         self,
@@ -323,14 +340,26 @@ class DatabaseManager:
         await self._conn.commit()
 
     async def save_terminal_symbols(self, terminal_id: str, symbols: list[str]):
-        """Replace terminal's symbol list (full sync from MarketWatch)."""
+        """Replace terminal's symbol list (full sync from MarketWatch).
+
+        Fast path: if the incoming list matches what's stored, do nothing.
+        MT5 EAs include the symbol list in every HEARTBEAT (every 10s), but the
+        list rarely changes — rewriting 20+ rows each heartbeat creates lock
+        contention that stalls trade routing.
+        """
+        existing = set(await self.get_terminal_symbols(terminal_id))
+        incoming = set(symbols)
+        if existing == incoming:
+            return  # no-op — the common case on every heartbeat
+
+        # Actual change: do DELETE + bulk INSERT in a single transaction
         await self._conn.execute(
             "DELETE FROM terminal_symbols WHERE terminal_id = ?", (terminal_id,)
         )
-        for sym in symbols:
-            await self._conn.execute(
+        if symbols:
+            await self._conn.executemany(
                 "INSERT INTO terminal_symbols (terminal_id, symbol) VALUES (?, ?)",
-                (terminal_id, sym),
+                [(terminal_id, sym) for sym in symbols],
             )
         await self._conn.commit()
 
