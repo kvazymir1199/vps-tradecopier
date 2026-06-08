@@ -60,3 +60,43 @@ export interface Config {
   telegram_bot_token: string;
   telegram_chat_id: string;
 }
+
+export type AlertType =
+  | "heartbeat_miss"
+  | "ack_timeout"
+  | "consecutive_nacks"
+  | "queue_depth"
+  | "slave_disconnected"
+  | "hub_started"
+  | "trade_copied"
+  | "daily_summary"
+  | "alert_storm";
+
+export interface TelegramSettings {
+  enabled: boolean;
+  bot_token: string;
+  chat_id: string;
+  daily_summary_time: string;
+  alert_storm_threshold: number;
+  alerts_retention_days: number;
+  alert_dedup_minutes: number;
+  mute_until_ms: number;
+  alert_enabled: Record<AlertType, boolean>;
+}
+
+export type TelegramSettingsUpdate = Partial<
+  Omit<TelegramSettings, "mute_until_ms">
+>;
+
+export interface AlertRecord {
+  id: number;
+  alert_type: AlertType | string;
+  terminal_id: string | null;
+  message: string;
+  channel: "telegram" | "email";
+  sent_at: number;
+  delivered: number;
+  retry_count: number;
+  deduplicated: number;
+  muted: number;
+}

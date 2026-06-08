@@ -149,6 +149,10 @@ CREATE INDEX IF NOT EXISTS idx_hb_terminal ON heartbeats(terminal_id);
 CREATE INDEX IF NOT EXISTS idx_hb_ts ON heartbeats(ts_ms);
 
 -- 9. alerts_history
+-- delivered = 1 if Telegram returned 200, 0 if not (or deduped/muted/disabled).
+-- retry_count: number of Telegram API retries that were needed (0..3).
+-- deduplicated = 1 if suppressed by the 5-minute dedup window.
+-- muted = 1 if suppressed by an active /mute window.
 CREATE TABLE IF NOT EXISTS alerts_history (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     alert_type      TEXT    NOT NULL,
@@ -156,12 +160,16 @@ CREATE TABLE IF NOT EXISTS alerts_history (
     message         TEXT    NOT NULL,
     channel         TEXT    NOT NULL CHECK (channel IN ('telegram', 'email')),
     sent_at         INTEGER NOT NULL,
-    delivered       INTEGER NOT NULL DEFAULT 0
+    delivered       INTEGER NOT NULL DEFAULT 0,
+    retry_count     INTEGER NOT NULL DEFAULT 0,
+    deduplicated    INTEGER NOT NULL DEFAULT 0,
+    muted           INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_alert_type ON alerts_history(alert_type);
 CREATE INDEX IF NOT EXISTS idx_alert_terminal ON alerts_history(terminal_id);
 CREATE INDEX IF NOT EXISTS idx_alert_sent ON alerts_history(sent_at);
+CREATE INDEX IF NOT EXISTS idx_alert_delivered ON alerts_history(delivered);
 
 -- === Terminal Symbols (from MarketWatch) ===
 CREATE TABLE IF NOT EXISTS terminal_symbols (

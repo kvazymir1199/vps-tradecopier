@@ -117,3 +117,56 @@ class ConfigUpdate(BaseModel):
     telegram_enabled: Optional[bool] = None
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
+
+
+# ── Telegram settings (extended) ───────────────────────────────────
+
+class TelegramSettingsOut(BaseModel):
+    enabled: bool
+    bot_token: str
+    chat_id: str
+    daily_summary_time: str
+    alert_storm_threshold: int
+    alerts_retention_days: int
+    alert_dedup_minutes: int
+    mute_until_ms: int
+    alert_enabled: dict[str, bool]
+
+
+class TelegramSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    bot_token: Optional[str] = None
+    chat_id: Optional[str] = None
+    daily_summary_time: Optional[str] = None
+    alert_storm_threshold: Optional[int] = None
+    alerts_retention_days: Optional[int] = None
+    alert_dedup_minutes: Optional[int] = None
+    alert_enabled: Optional[dict[str, bool]] = None
+
+
+class TelegramTestResult(BaseModel):
+    delivered: bool
+    detail: str
+
+
+class MuteRequest(BaseModel):
+    duration_seconds: int
+
+
+class MuteStatus(BaseModel):
+    muted_until_ms: int
+
+
+# ── Alerts history ─────────────────────────────────────────────────
+
+class AlertOut(BaseModel):
+    id: int
+    alert_type: str
+    terminal_id: Optional[str] = None
+    message: str
+    channel: str
+    sent_at: int
+    delivered: int
+    retry_count: int
+    deduplicated: int
+    muted: int

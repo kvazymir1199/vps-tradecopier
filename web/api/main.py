@@ -6,7 +6,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from web.api.database import initialize_db
-from web.api.routers import config, links, magic_mappings, symbol_mappings, terminals
+from web.api.routers import (
+    alerts,
+    config,
+    links,
+    magic_mappings,
+    symbol_mappings,
+    telegram_settings,
+    terminals,
+)
 
 
 @asynccontextmanager
@@ -31,6 +39,8 @@ def create_app() -> FastAPI:
     app.include_router(symbol_mappings.router, prefix="/api")
     app.include_router(magic_mappings.router, prefix="/api")
     app.include_router(config.router, prefix="/api")
+    app.include_router(telegram_settings.router, prefix="/api")
+    app.include_router(alerts.router, prefix="/api")
 
     return app
 

@@ -13,6 +13,7 @@ from hub.transport.pipe_server import PipeServer
 from hub.protocol.serializer import decode_master_message, encode_slave_command, decode_ack
 from hub.monitor.health import HealthChecker
 from hub.monitor.alerts import AlertSender
+from hub.monitor.telegram_bot import TelegramBot
 
 LOG_DIR = str(Path(DB_PATH).parent)
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -35,10 +36,13 @@ class HubService:
         self.router: Router | None = None
         self.alert_sender: AlertSender | None = None
         self.health_checker: HealthChecker | None = None
+        self.telegram_bot: TelegramBot | None = None
+        self._started_at_ms: int = 0
         self._pipe_servers: list[PipeServer] = []
         self._slave_cmd_pipes: dict[str, PipeServer] = {}
         self._known_masters: set[str] = set()
         self._known_slaves: set[str] = set()
+        self._last_daily_summary_day: str | None = None
 
     async def _handle_master_message(self, raw: str) -> str | None:
         """Process a raw JSON message from a master EA."""
@@ -188,8 +192,12 @@ class HubService:
             cmd_name = f"copier_{sid}_cmd"
             ack_name = f"copier_{sid}_ack"
 
+            # Capture sid in default-arg so each pipe alerts for its own slave.
+            async def _on_slave_drop(slave_id: str = sid) -> None:
+                await self._emit_slave_disconnected(slave_id)
+
             cmd_ps = PipeServer(cmd_name, self._noop_handler, write_only=True)
-            ack_ps = PipeServer(ack_name, self._handle_slave_ack)
+            ack_ps = PipeServer(ack_name, self._handle_slave_ack, on_disconnect=_on_slave_drop)
 
             self._slave_cmd_pipes[sid] = cmd_ps
             self._pipe_servers.append(cmd_ps)
@@ -213,7 +221,13 @@ class HubService:
 
         self.router = Router(self.db, self.config.resend_window_size)
         self.alert_sender = AlertSender(self.db, self.config)
+        self.alert_sender.set_broker_resolver(self._resolve_broker)
         self.health_checker = HealthChecker(self.db, self.config, self._resend_message)
+        self._started_at_ms = int(time.time() * 1000)
+        self.telegram_bot = TelegramBot(
+            self.db, self.config, self.alert_sender,
+            self.health_checker, self._started_at_ms,
+        )
 
         # Collect terminal IDs from links AND registered terminals
         links = await self.db.get_active_links()
@@ -234,8 +248,27 @@ class HubService:
         self._create_pipes(master_ids, slave_ids)
 
         logger.info(f"Hub Service started — {len(self._pipe_servers)} pipes listening")
+
+        # One-shot startup alert so the operator notices unattended restarts.
+        await self.alert_sender.send(
+            {
+                "alert_type": "hub_started",
+                "terminal_id": None,
+                "message": (
+                    f"Hub started — vps={self.config.vps_id}, "
+                    f"pipes={len(self._pipe_servers)}, "
+                    f"masters={len(self._known_masters)}, "
+                    f"slaves={len(self._known_slaves)}"
+                ),
+            },
+            force=True,
+        )
+
         asyncio.create_task(self._health_loop())
         asyncio.create_task(self._terminal_discovery_loop())
+        asyncio.create_task(self._daily_summary_loop())
+        asyncio.create_task(self._alerts_cleanup_loop())
+        asyncio.create_task(self.telegram_bot.start())
         await self._run_forever()
 
     @staticmethod
@@ -301,6 +334,72 @@ class HubService:
             except Exception as e:
                 logger.error(f"Health check error: {e}")
             await asyncio.sleep(10)
+
+    async def _resolve_broker(self, terminal_id: str) -> str | None:
+        """Look up the broker for a terminal — used for Telegram tagging."""
+        row = await self.db.fetch_one(
+            "SELECT broker_server FROM terminals WHERE terminal_id = ?",
+            (terminal_id,),
+        )
+        return row["broker_server"] if row and row.get("broker_server") else None
+
+    async def _emit_slave_disconnected(self, slave_id: str) -> None:
+        """Fired by the per-slave ACK PipeServer when its client drops.
+
+        Beats the 30 s heartbeat-timeout path — operator sees the drop
+        within milliseconds, not after the next health-check tick.
+        """
+        try:
+            await self.alert_sender.send({
+                "alert_type": "slave_disconnected",
+                "terminal_id": slave_id,
+                "message": f"Slave {slave_id} pipe dropped",
+            })
+            await self.db.update_terminal_status(
+                slave_id, "Disconnected", "Pipe dropped"
+            )
+        except Exception as e:
+            logger.error(f"slave_disconnected emit failed for {slave_id}: {e}")
+
+    async def _daily_summary_loop(self):
+        """Fire one daily_summary alert at `telegram_daily_summary_time` UTC.
+
+        Comparison is per-day-string ("YYYY-MM-DD") so DST/restart can't
+        re-fire on the same calendar day.
+        """
+        while True:
+            try:
+                hhmm = self.config.telegram.daily_summary_time
+                target_h, _, target_m = hhmm.partition(":")
+                th = int(target_h) if target_h.isdigit() else 8
+                tm = int(target_m) if target_m.isdigit() else 0
+                now_utc = time.gmtime()
+                today = time.strftime("%Y-%m-%d", now_utc)
+                if (
+                    (now_utc.tm_hour, now_utc.tm_min) >= (th, tm)
+                    and self._last_daily_summary_day != today
+                ):
+                    alert = await self.health_checker.compose_daily_summary()
+                    await self.alert_sender.send(alert)
+                    self._last_daily_summary_day = today
+            except Exception as e:
+                logger.error(f"daily_summary loop error: {e}")
+            await asyncio.sleep(60)
+
+    async def _alerts_cleanup_loop(self):
+        """Purge alerts_history older than `alerts_retention_days` once a day."""
+        # Wait one minute before the first run so startup logs stay clean.
+        await asyncio.sleep(60)
+        while True:
+            try:
+                purged = await self.db.purge_old_alerts(
+                    self.config.telegram.alerts_retention_days
+                )
+                if purged:
+                    logger.info(f"alerts_history: purged {purged} old rows")
+            except Exception as e:
+                logger.error(f"alerts cleanup error: {e}")
+            await asyncio.sleep(86400)  # daily
 
     async def _run_forever(self):
         while True:

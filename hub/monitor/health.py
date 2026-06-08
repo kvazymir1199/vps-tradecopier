@@ -104,3 +104,79 @@ class HealthChecker:
                 "message": f"Master {r['master_id']} has {r['cnt']} pending messages",
             })
         return alerts
+
+    async def status_snapshot(self) -> dict:
+        """Compact Hub status used by the Telegram `/status` command."""
+        now = int(time.time() * 1000)
+        terminals = await self._db.fetch_all(
+            "SELECT terminal_id, role, status, last_heartbeat FROM terminals"
+        )
+        online = [
+            t for t in terminals
+            if now - t["last_heartbeat"] < self._heartbeat_timeout_ms
+        ]
+        pending_row = await self._db.fetch_one(
+            "SELECT COUNT(*) AS cnt FROM messages WHERE status = 'pending'"
+        )
+        last_alerts = await self._db.fetch_all(
+            "SELECT alert_type, terminal_id, sent_at FROM alerts_history "
+            "ORDER BY sent_at DESC LIMIT 5"
+        )
+        return {
+            "pending_messages": int(pending_row["cnt"]) if pending_row else 0,
+            "online_terminals": online,
+            "total_terminals": len(terminals),
+            "last_alerts": last_alerts,
+        }
+
+    async def compose_daily_summary(self, window_ms: int = 86_400_000) -> dict:
+        """24-hour digest: messages routed, ACK rate, NACK count, top NACK
+        reasons, alert count, uptime. Returned as an alert dict ready to send.
+        """
+        now = int(time.time() * 1000)
+        cutoff = now - window_ms
+
+        msg_row = await self._db.fetch_one(
+            "SELECT COUNT(*) AS cnt FROM messages "
+            "WHERE ts_ms >= ? AND type NOT IN ('HEARTBEAT', 'REGISTER')",
+            (cutoff,),
+        )
+        ack_row = await self._db.fetch_one(
+            "SELECT "
+            "  SUM(CASE WHEN ack_type='ACK' THEN 1 ELSE 0 END) AS acks, "
+            "  SUM(CASE WHEN ack_type='NACK' THEN 1 ELSE 0 END) AS nacks "
+            "FROM message_acks WHERE ts_ms >= ?",
+            (cutoff,),
+        )
+        nack_reasons = await self._db.fetch_all(
+            "SELECT nack_reason, COUNT(*) AS cnt FROM message_acks "
+            "WHERE ts_ms >= ? AND ack_type='NACK' AND nack_reason IS NOT NULL "
+            "GROUP BY nack_reason ORDER BY cnt DESC LIMIT 3",
+            (cutoff,),
+        )
+        alert_row = await self._db.fetch_one(
+            "SELECT COUNT(*) AS cnt FROM alerts_history WHERE sent_at >= ?",
+            (cutoff,),
+        )
+
+        msgs = int(msg_row["cnt"]) if msg_row else 0
+        acks = int(ack_row["acks"] or 0) if ack_row else 0
+        nacks = int(ack_row["nacks"] or 0) if ack_row else 0
+        total_acks = acks + nacks
+        ack_rate = (acks / total_acks * 100) if total_acks else 0.0
+        alerts_fired = int(alert_row["cnt"]) if alert_row else 0
+
+        lines = [
+            f"messages routed: {msgs}",
+            f"ACK rate: {ack_rate:.1f}% ({acks}/{total_acks})",
+            f"NACKs: {nacks}",
+            f"alerts fired: {alerts_fired}",
+        ]
+        if nack_reasons:
+            top = ", ".join(f"{r['nack_reason']}={r['cnt']}" for r in nack_reasons)
+            lines.append(f"top NACK reasons: {top}")
+        return {
+            "alert_type": "daily_summary",
+            "terminal_id": None,
+            "message": "\n".join(lines),
+        }

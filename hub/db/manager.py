@@ -50,6 +50,17 @@ class DatabaseManager:
             )
             await self._conn.commit()
 
+        # Migration: extend alerts_history with retry_count / deduplicated / muted
+        # (MS3 Telegram redesign — fine-grained delivery telemetry per alert).
+        cursor = await self._conn.execute("PRAGMA table_info(alerts_history)")
+        alert_cols = [row[1] for row in await cursor.fetchall()]
+        for col in ("retry_count", "deduplicated", "muted"):
+            if col not in alert_cols:
+                await self._conn.execute(
+                    f"ALTER TABLE alerts_history ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0"
+                )
+        await self._conn.commit()
+
         # Migration: recreate messages table with updated CHECK constraint
         # (adds PENDING_PLACE, PENDING_MODIFY, PENDING_DELETE types)
         # Must disable FK checks to avoid constraint failures during table rename
@@ -383,6 +394,21 @@ class DatabaseManager:
             "telegram_enabled": "false",
             "telegram_bot_token": "",
             "telegram_chat_id": "",
+            "telegram_daily_summary_time": "08:00",
+            "telegram_alert_storm_threshold": "10",
+            "telegram_alerts_retention_days": "90",
+            "telegram_mute_until_ms": "0",
+            # Per-alert-type enabled toggles. Defaults follow ms3-deliverables.md §4.2:
+            # trade_copied is opt-in (off by default) due to high message volume.
+            "alert_enabled_heartbeat_miss": "true",
+            "alert_enabled_ack_timeout": "true",
+            "alert_enabled_consecutive_nacks": "true",
+            "alert_enabled_queue_depth": "true",
+            "alert_enabled_slave_disconnected": "true",
+            "alert_enabled_hub_started": "true",
+            "alert_enabled_trade_copied": "false",
+            "alert_enabled_daily_summary": "true",
+            "alert_enabled_alert_storm": "true",
         }
         for key, value in defaults.items():
             await self._conn.execute(
@@ -390,3 +416,102 @@ class DatabaseManager:
                 (key, value),
             )
         await self._conn.commit()
+
+    # ── Alerts (history + queries used by API/Telegram bot) ─────
+
+    async def insert_alert(
+        self,
+        alert_type: str,
+        terminal_id: str | None,
+        message: str,
+        channel: str,
+        sent_at: int,
+        delivered: int,
+        retry_count: int = 0,
+        deduplicated: int = 0,
+        muted: int = 0,
+    ) -> int:
+        cursor = await self._conn.execute(
+            "INSERT INTO alerts_history "
+            "(alert_type, terminal_id, message, channel, sent_at, delivered, "
+            "retry_count, deduplicated, muted) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                alert_type, terminal_id, message, channel, sent_at,
+                delivered, retry_count, deduplicated, muted,
+            ),
+        )
+        await self._conn.commit()
+        return cursor.lastrowid
+
+    async def get_alerts(
+        self,
+        limit: int = 1000,
+        alert_type: str | None = None,
+        terminal_id: str | None = None,
+        delivered: int | None = None,
+        since_ms: int | None = None,
+        until_ms: int | None = None,
+    ) -> list[dict]:
+        clauses: list[str] = []
+        params: list = []
+        if alert_type:
+            clauses.append("alert_type = ?")
+            params.append(alert_type)
+        if terminal_id:
+            clauses.append("terminal_id = ?")
+            params.append(terminal_id)
+        if delivered is not None:
+            clauses.append("delivered = ?")
+            params.append(delivered)
+        if since_ms is not None:
+            clauses.append("sent_at >= ?")
+            params.append(since_ms)
+        if until_ms is not None:
+            clauses.append("sent_at <= ?")
+            params.append(until_ms)
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        params.append(limit)
+        return await self.fetch_all(
+            f"SELECT * FROM alerts_history {where} ORDER BY sent_at DESC LIMIT ?",
+            tuple(params),
+        )
+
+    async def count_alerts_since(self, since_ms: int) -> int:
+        row = await self.fetch_one(
+            "SELECT COUNT(*) AS cnt FROM alerts_history WHERE sent_at >= ?",
+            (since_ms,),
+        )
+        return int(row["cnt"]) if row else 0
+
+    async def count_deduplicated_since(self, since_ms: int) -> int:
+        row = await self.fetch_one(
+            "SELECT COUNT(*) AS cnt FROM alerts_history "
+            "WHERE sent_at >= ? AND deduplicated = 1",
+            (since_ms,),
+        )
+        return int(row["cnt"]) if row else 0
+
+    async def purge_old_alerts(self, max_age_days: int = 90) -> int:
+        cutoff = self._now_ms() - (max_age_days * 86400 * 1000)
+        cursor = await self._conn.execute(
+            "DELETE FROM alerts_history WHERE sent_at < ?", (cutoff,)
+        )
+        await self._conn.commit()
+        return cursor.rowcount or 0
+
+    # ── Mute state (read/write via config table) ────────────────
+
+    async def get_mute_until_ms(self) -> int:
+        row = await self.fetch_one(
+            "SELECT value FROM config WHERE key = 'telegram_mute_until_ms'"
+        )
+        if not row:
+            return 0
+        try:
+            return int(row["value"])
+        except (ValueError, TypeError):
+            return 0
+
+    async def set_mute_until_ms(self, until_ms: int) -> None:
+        await self.set_config("telegram_mute_until_ms", str(int(until_ms)))

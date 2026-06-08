@@ -23,10 +23,17 @@ class PipeServer:
     pattern and prevents ERROR_PIPE_BUSY (231) on reconnect.
     """
 
-    def __init__(self, pipe_name: str, on_message: Callable[[str], Awaitable[str | None]], write_only: bool = False):
+    def __init__(
+        self,
+        pipe_name: str,
+        on_message: Callable[[str], Awaitable[str | None]],
+        write_only: bool = False,
+        on_disconnect: Callable[[], Awaitable[None]] | None = None,
+    ):
         self._pipe_name = f"\\\\.\\pipe\\{pipe_name}"
         self._on_message = on_message
         self._write_only = write_only
+        self._on_disconnect = on_disconnect
         self._running = False
         self._handle = None  # latest active client handle (used for external writes)
 
@@ -125,6 +132,12 @@ class PipeServer:
             if self._handle == handle:
                 self._handle = None
             logger.info(f"Pipe {self._pipe_name} client disconnected")
+            if self._on_disconnect is not None and self._running:
+                # Fire-and-forget — the disconnect notifier must not block pipe reset.
+                try:
+                    asyncio.create_task(self._on_disconnect())
+                except Exception as exc:
+                    logger.warning(f"on_disconnect dispatch failed: {exc}")
 
     @staticmethod
     def _make_security_attributes():

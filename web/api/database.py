@@ -3,21 +3,27 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from hub.config import DB_PATH
+from hub.db.manager import DatabaseManager
 
 SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "hub" / "db" / "schema.sql"
 
 
 async def initialize_db():
-    """Create tables if they don't exist (uses the same schema as Hub)."""
+    """Ensure schema + migrations are applied.
+
+    Routes the work through DatabaseManager so the API server applies the
+    same migrations the Hub does. Without this the API would query columns
+    that don't exist yet on a pre-MS3 database file.
+    """
     if not DB_PATH:
         return
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    conn = await aiosqlite.connect(DB_PATH)
+    mgr = DatabaseManager(DB_PATH)
     try:
-        schema = SCHEMA_PATH.read_text(encoding="utf-8")
-        await conn.executescript(schema)
+        await mgr.initialize()
+        await mgr.seed_config_defaults()
     finally:
-        await conn.close()
+        await mgr.close()
 
 
 @asynccontextmanager
