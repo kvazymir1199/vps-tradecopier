@@ -40,7 +40,30 @@ This is the full setup path for a fresh Windows VPS. Follow phases top-to-bottom
 
 ## Phase 1 — Install system tools
 
-Install in this order:
+You have two paths — pick one:
+
+### Path A (recommended) — portable install via `install.bat`
+
+The repo ships with a self-contained installer that downloads a Python 3.12
+embeddable and Node.js 20 LTS into `tools\` next to the repo, so the host
+machine doesn't need any pre-installed runtime. **Git is the only thing you
+need on the box** — install it from https://git-scm.com/download/win.
+
+```bash
+cd C:\
+git clone <repo-url> Tino-V
+cd Tino-V
+install.bat       # right-click → Run as administrator the first time
+```
+
+`install.bat` is idempotent — re-run it after a `git pull` and it only
+re-installs the bits that are missing. Skip to **Phase 3** when it
+finishes.
+
+### Path B — system-wide install (for development)
+
+If you'd rather run against system-wide Python / Node (better for editing
+code, running tests under your IDE, etc.):
 
 1. **Git** — https://git-scm.com/download/win (default install).
 2. **Python 3.11+** — https://www.python.org/downloads/. Check **"Add python.exe to PATH"** during install.
@@ -60,6 +83,9 @@ npm --version
 ```
 
 ## Phase 2 — Clone and provision the project
+
+Skip this phase if you ran `install.bat` in Path A — it already cloned
+and provisioned for you.
 
 ```bash
 cd C:\

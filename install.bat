@@ -100,7 +100,12 @@ if exist "%PYTHON_DIR%\Lib\site-packages\uvicorn" (
     echo [3/6] Python dependencies already installed.
 ) else (
     echo [3/6] Installing Python dependencies...
-    "%PIP_EXE%" install aiosqlite fastapi pywin32 python-telegram-bot uvicorn -q --no-warn-script-location
+    rem Runtime deps for Hub + FastAPI (aiosqlite, fastapi, pywin32, uvicorn).
+    rem Telegram is implemented with stdlib urllib so python-telegram-bot is
+    rem not installed.
+    rem httpx + psutil are dev/test deps — included so MS3 stress tests and
+    rem API tests work without a second install pass.
+    "%PIP_EXE%" install aiosqlite fastapi pywin32 uvicorn httpx psutil -q --no-warn-script-location
     if errorlevel 1 (
         echo ERROR: Failed to install Python dependencies.
         pause & exit /b 1
