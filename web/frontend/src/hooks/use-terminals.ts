@@ -1,27 +1,32 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchApi } from "@/lib/api";
 import { Terminal } from "@/types";
 
 export function useTerminals(pollInterval = 2000) {
   const [terminals, setTerminals] = useState<Terminal[]>([]);
   const [loading, setLoading] = useState(true);
+  const mountedRef = useRef(true);
 
   const load = useCallback(async () => {
     try {
       const data = await fetchApi<Terminal[]>("/terminals");
-      setTerminals(data);
+      if (mountedRef.current) setTerminals(data);
     } catch (err) {
       console.error("Failed to load terminals:", err);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     load();
     const interval = setInterval(load, pollInterval);
-    return () => clearInterval(interval);
+    return () => {
+      mountedRef.current = false;
+      clearInterval(interval);
+    };
   }, [load, pollInterval]);
 
   const createTerminal = async (terminalId: string, role: "master" | "slave") => {
