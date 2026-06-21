@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from web.api.database import get_db
 from web.api.schemas import TerminalCreate, TerminalOut
@@ -17,10 +17,16 @@ async def create_terminal(body: TerminalCreate):
         raise HTTPException(status_code=400, detail="role must be 'master' or 'slave'")
     now_ms = int(time.time() * 1000)
     async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT terminal_id FROM terminals WHERE terminal_id = ?", (body.terminal_id,)
+        )
+        if await cursor.fetchone():
+            raise HTTPException(status_code=409, detail="Terminal already exists")
         await db.execute(
-            """INSERT OR IGNORE INTO terminals (terminal_id, role, status, status_message, last_heartbeat)
-               VALUES (?, ?, 'Inactive', 'Registered manually', ?)""",
-            (body.terminal_id, body.role, now_ms),
+            """INSERT INTO terminals
+               (terminal_id, role, status, status_message, created_at, last_heartbeat)
+               VALUES (?, ?, 'Disconnected', 'Registered manually', ?, ?)""",
+            (body.terminal_id, body.role, now_ms, now_ms),
         )
         await db.commit()
         cursor = await db.execute(
@@ -59,3 +65,25 @@ async def get_terminal_symbols(terminal_id: str):
         )
         rows = await cursor.fetchall()
     return [r[0] for r in rows]
+
+
+@router.delete("/{terminal_id}", status_code=204)
+async def delete_terminal(terminal_id: str):
+    """Delete a terminal and its dependent links, mappings, and heartbeats."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT terminal_id FROM terminals WHERE terminal_id = ?", (terminal_id,)
+        )
+        if await cursor.fetchone() is None:
+            raise HTTPException(status_code=404, detail="Terminal not found")
+        # Links cascade to symbol_mappings + magic_mappings via the link_id FK
+        await db.execute(
+            "DELETE FROM master_slave_links WHERE master_id = ? OR slave_id = ?",
+            (terminal_id, terminal_id),
+        )
+        # heartbeats has no ON DELETE CASCADE — remove explicitly
+        await db.execute("DELETE FROM heartbeats WHERE terminal_id = ?", (terminal_id,))
+        # terminal_symbols cascades when the terminal row is removed
+        await db.execute("DELETE FROM terminals WHERE terminal_id = ?", (terminal_id,))
+        await db.commit()
+    return Response(status_code=204)

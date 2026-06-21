@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Response
 
 from web.api.database import get_db
-from web.api.schemas import MagicMappingCreate, MagicMappingOut
+from web.api.schemas import MagicMappingCreate, MagicMappingOut, MagicMappingUpdate
 
 router = APIRouter(tags=["magic-mappings"])
 
@@ -54,6 +54,34 @@ async def create_magic_mapping(link_id: int, body: MagicMappingCreate):
         )
         await db.commit()
         mapping_id = cursor.lastrowid
+
+        cursor = await db.execute(
+            "SELECT * FROM magic_mappings WHERE id = ?", (mapping_id,)
+        )
+        row = await cursor.fetchone()
+    return dict(row)
+
+
+@router.put("/magic-mappings/{mapping_id}", response_model=MagicMappingOut)
+async def update_magic_mapping(mapping_id: int, body: MagicMappingUpdate):
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT * FROM magic_mappings WHERE id = ?", (mapping_id,)
+        )
+        existing = await cursor.fetchone()
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Magic mapping not found")
+
+        updates = body.model_dump(exclude_none=True)
+        if not updates:
+            return dict(existing)
+
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values()) + [mapping_id]
+        await db.execute(
+            f"UPDATE magic_mappings SET {set_clause} WHERE id = ?", values
+        )
+        await db.commit()
 
         cursor = await db.execute(
             "SELECT * FROM magic_mappings WHERE id = ?", (mapping_id,)
