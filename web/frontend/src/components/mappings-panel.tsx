@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { fetchApi } from "@/lib/api";
 import { useMappings } from "@/hooks/use-mappings";
-import { SymbolSuggestionsResponse, AllowedDirection } from "@/types";
+import { SymbolSuggestionsResponse, AllowedDirection, MagicMapping } from "@/types";
+import { EditMagicMappingDialog } from "@/components/edit-magic-mapping-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -50,9 +51,11 @@ export function MappingsPanel({ linkId, open, onOpenChange }: MappingsPanelProps
     addSymbolMapping,
     addMagicMapping,
     deleteMagicMapping,
+    updateMagicMapping,
   } = useMappings(linkId);
 
   const [magicDialogOpen, setMagicDialogOpen] = useState(false);
+  const [editingMagic, setEditingMagic] = useState<MagicMapping | null>(null);
   const [symbolPairs, setSymbolPairs] = useState<
     { master: string; slave: string | null }[]
   >([]);
@@ -172,6 +175,21 @@ export function MappingsPanel({ linkId, open, onOpenChange }: MappingsPanelProps
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to add magic mapping"
+      );
+      throw err;
+    }
+  };
+
+  const handleUpdateMagic = async (
+    id: number,
+    updates: { slave_setup_id: number; allowed_direction: AllowedDirection },
+  ) => {
+    try {
+      await updateMagicMapping(id, updates);
+      toast.success("Magic mapping updated");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update magic mapping"
       );
       throw err;
     }
@@ -361,13 +379,22 @@ export function MappingsPanel({ linkId, open, onOpenChange }: MappingsPanelProps
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="destructive"
-                            size="xs"
-                            onClick={() => handleDeleteMagic(m.id)}
-                          >
-                            Delete
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onClick={() => setEditingMagic(m)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="xs"
+                              onClick={() => handleDeleteMagic(m.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -383,6 +410,12 @@ export function MappingsPanel({ linkId, open, onOpenChange }: MappingsPanelProps
           open={magicDialogOpen}
           onOpenChange={setMagicDialogOpen}
           onSubmit={handleAddMagic}
+        />
+        <EditMagicMappingDialog
+          mapping={editingMagic}
+          open={editingMagic !== null}
+          onOpenChange={(o) => { if (!o) setEditingMagic(null); }}
+          onSubmit={handleUpdateMagic}
         />
       </DialogContent>
     </Dialog>
