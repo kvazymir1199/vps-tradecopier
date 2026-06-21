@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
 import "./globals.css";
+import { AppSidebar } from "@/components/shell/app-sidebar";
+import { Topbar } from "@/components/shell/topbar";
+import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,16 +30,14 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <nav className="border-b">
-          <div className="container mx-auto flex h-14 items-center gap-6 px-4">
-            <span className="font-bold">Trade Copier</span>
-            <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">Dashboard</Link>
-            <Link href="/alerts" className="text-sm text-muted-foreground hover:text-foreground">Alerts</Link>
-            <Link href="/settings" className="text-sm text-muted-foreground hover:text-foreground">Settings</Link>
-            <Link href="/settings/telegram" className="text-sm text-muted-foreground hover:text-foreground">Telegram</Link>
-          </div>
-        </nav>
-        {children}
+        <div className="app-root" data-variant="4">
+          <AppSidebar />
+          <main className="main">
+            <Topbar />
+            <div className="screen">{children}</div>
+          </main>
+        </div>
+        <Toaster />
       </body>
     </html>
   );
