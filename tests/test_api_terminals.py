@@ -65,3 +65,27 @@ async def test_get_terminal(client):
 async def test_get_terminal_not_found(client):
     resp = await client.get("/api/terminals/NOPE")
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_terminal(client):
+    resp = await client.post("/api/terminals", json={"terminal_id": "M2", "role": "master"})
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["terminal_id"] == "M2"
+    assert data["role"] == "master"
+    assert data["status"] == "Disconnected"
+    # created_at/last_heartbeat are stored in ms, so well above a seconds-epoch value
+    assert data["last_heartbeat"] > 1_000_000_000_000
+
+
+@pytest.mark.asyncio
+async def test_create_terminal_duplicate(client):
+    resp = await client.post("/api/terminals", json={"terminal_id": "M1", "role": "master"})
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_create_terminal_bad_role(client):
+    resp = await client.post("/api/terminals", json={"terminal_id": "X1", "role": "boss"})
+    assert resp.status_code == 400

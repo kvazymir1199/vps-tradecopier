@@ -17,10 +17,16 @@ async def create_terminal(body: TerminalCreate):
         raise HTTPException(status_code=400, detail="role must be 'master' or 'slave'")
     now_ms = int(time.time() * 1000)
     async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT terminal_id FROM terminals WHERE terminal_id = ?", (body.terminal_id,)
+        )
+        if await cursor.fetchone():
+            raise HTTPException(status_code=409, detail="Terminal already exists")
         await db.execute(
-            """INSERT OR IGNORE INTO terminals (terminal_id, role, status, status_message, last_heartbeat)
-               VALUES (?, ?, 'Inactive', 'Registered manually', ?)""",
-            (body.terminal_id, body.role, now_ms),
+            """INSERT INTO terminals
+               (terminal_id, role, status, status_message, created_at, last_heartbeat)
+               VALUES (?, ?, 'Disconnected', 'Registered manually', ?, ?)""",
+            (body.terminal_id, body.role, now_ms, now_ms),
         )
         await db.commit()
         cursor = await db.execute(
