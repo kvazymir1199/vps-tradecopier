@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# design-sync (claude.ai/design): staged scripts, build output, machine state.
+# The durable inputs under .design-sync/ (config.json, NOTES.md, conventions.md,
+# previews/, build-css.mjs, build-entry.mjs, tw-input.css) ARE committed.
+/.ds-sync/
+/ds-bundle/
+/.playwright-mcp/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
