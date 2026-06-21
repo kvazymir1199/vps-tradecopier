@@ -76,6 +76,11 @@ class MagicMappingOut(BaseModel):
     allowed_direction: Literal["BUY", "SELL", "BOTH"]
 
 
+class MagicMappingUpdate(BaseModel):
+    slave_setup_id: Optional[int] = None
+    allowed_direction: Optional[Literal["BUY", "SELL", "BOTH"]] = None
+
+
 # ── Config ────────────────────────────────────────────────────────
 
 class ConfigOut(BaseModel):

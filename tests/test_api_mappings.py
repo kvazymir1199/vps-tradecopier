@@ -208,3 +208,50 @@ async def test_magic_mapping_link_not_found(client):
         "master_setup_id": 100, "slave_setup_id": 200,
     })
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_magic_mapping(client):
+    created = (await client.post("/api/links/1/magic-mappings", json={
+        "master_setup_id": 1, "slave_setup_id": 5, "allowed_direction": "BOTH",
+    })).json()
+    mid = created["id"]
+
+    resp = await client.put(f"/api/magic-mappings/{mid}", json={
+        "slave_setup_id": 9, "allowed_direction": "BUY",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["slave_setup_id"] == 9
+    assert data["allowed_direction"] == "BUY"
+    assert data["master_setup_id"] == 1  # unchanged
+
+
+@pytest.mark.asyncio
+async def test_update_magic_mapping_partial(client):
+    created = (await client.post("/api/links/1/magic-mappings", json={
+        "master_setup_id": 2, "slave_setup_id": 5, "allowed_direction": "BOTH",
+    })).json()
+    mid = created["id"]
+
+    resp = await client.put(f"/api/magic-mappings/{mid}", json={"allowed_direction": "SELL"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["allowed_direction"] == "SELL"
+    assert data["slave_setup_id"] == 5  # untouched
+
+
+@pytest.mark.asyncio
+async def test_update_magic_mapping_not_found(client):
+    resp = await client.put("/api/magic-mappings/9999", json={"allowed_direction": "BUY"})
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_magic_mapping_invalid_direction(client):
+    created = (await client.post("/api/links/1/magic-mappings", json={
+        "master_setup_id": 3, "slave_setup_id": 5, "allowed_direction": "BOTH",
+    })).json()
+    mid = created["id"]
+    resp = await client.put(f"/api/magic-mappings/{mid}", json={"allowed_direction": "UP"})
+    assert resp.status_code == 422
