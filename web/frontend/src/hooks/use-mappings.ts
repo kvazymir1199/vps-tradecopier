@@ -59,5 +59,16 @@ export function useMappings(linkId: number | null) {
     await refresh();
   };
 
-  return { symbolMappings, magicMappings, loading, refresh, addSymbolMapping, deleteSymbolMapping, addMagicMapping, deleteMagicMapping };
+  const updateMagicMapping = async (
+    id: number,
+    updates: { slave_setup_id?: number; allowed_direction?: AllowedDirection },
+  ) => {
+    await fetchApi(`/magic-mappings/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    });
+    await refresh();
+  };
+
+  return { symbolMappings, magicMappings, loading, refresh, addSymbolMapping, deleteSymbolMapping, addMagicMapping, deleteMagicMapping, updateMagicMapping };
 }
