@@ -44,6 +44,9 @@ export function EditMagicMappingDialog({
     if (mapping) {
       setSlaveSetupId(String(mapping.slave_setup_id));
       setDirection(mapping.allowed_direction);
+    } else {
+      setSlaveSetupId("");
+      setDirection("BOTH");
     }
   }, [mapping]);
 
@@ -52,7 +55,7 @@ export function EditMagicMappingDialog({
     setSubmitting(true);
     try {
       await onSubmit(mapping.id, {
-        slave_setup_id: parseInt(slaveSetupId),
+        slave_setup_id: parseInt(slaveSetupId, 10),
         allowed_direction: direction,
       });
       onOpenChange(false);
