@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from web.api.database import get_db
 from web.api.schemas import TerminalCreate, TerminalOut
@@ -65,3 +65,25 @@ async def get_terminal_symbols(terminal_id: str):
         )
         rows = await cursor.fetchall()
     return [r[0] for r in rows]
+
+
+@router.delete("/{terminal_id}", status_code=204)
+async def delete_terminal(terminal_id: str):
+    """Delete a terminal and its dependent links, mappings, and heartbeats."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT terminal_id FROM terminals WHERE terminal_id = ?", (terminal_id,)
+        )
+        if await cursor.fetchone() is None:
+            raise HTTPException(status_code=404, detail="Terminal not found")
+        # Links cascade to symbol_mappings + magic_mappings via the link_id FK
+        await db.execute(
+            "DELETE FROM master_slave_links WHERE master_id = ? OR slave_id = ?",
+            (terminal_id, terminal_id),
+        )
+        # heartbeats has no ON DELETE CASCADE — remove explicitly
+        await db.execute("DELETE FROM heartbeats WHERE terminal_id = ?", (terminal_id,))
+        # terminal_symbols cascades when the terminal row is removed
+        await db.execute("DELETE FROM terminals WHERE terminal_id = ?", (terminal_id,))
+        await db.commit()
+    return Response(status_code=204)
