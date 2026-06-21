@@ -19,7 +19,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Toaster } from "@/components/ui/sonner";
 import { useAlerts, AlertFilters } from "@/hooks/use-alerts";
 import { AlertRecord } from "@/types";
 
@@ -66,7 +65,7 @@ export default function AlertsPage() {
   }, [alerts]);
 
   return (
-    <main className="container mx-auto py-8 space-y-6 px-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Alerts history</h1>
         <p className="text-sm text-muted-foreground">
@@ -193,7 +192,6 @@ export default function AlertsPage() {
         </TableBody>
       </Table>
 
-      <Toaster />
-    </main>
+    </div>
   );
 }

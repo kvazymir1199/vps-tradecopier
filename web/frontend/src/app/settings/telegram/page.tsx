@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { useTelegramSettings } from "@/hooks/use-telegram";
 import { AlertType, TelegramSettings } from "@/types";
@@ -46,11 +45,10 @@ export default function TelegramSettingsPage() {
 
   if (loading || !form) {
     return (
-      <main className="container mx-auto py-8 px-4">
+      <div>
         <h1 className="text-2xl font-bold mb-8">Telegram</h1>
         <p className="text-muted-foreground">Loading…</p>
-        <Toaster />
-      </main>
+      </div>
     );
   }
 
@@ -93,7 +91,7 @@ export default function TelegramSettingsPage() {
   };
 
   return (
-    <main className="container mx-auto py-8 space-y-8 px-4">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Telegram</h1>
         <div className="flex gap-2">
@@ -230,8 +228,7 @@ export default function TelegramSettingsPage() {
         </div>
       </section>
 
-      <Toaster />
-    </main>
+    </div>
   );
 }
 

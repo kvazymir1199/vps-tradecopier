@@ -6,7 +6,6 @@ import { Config } from "@/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 
 export default function SettingsPage() {
@@ -21,11 +20,10 @@ export default function SettingsPage() {
 
   if (loading || !form) {
     return (
-      <main className="container mx-auto py-8 px-4">
+      <div>
         <h1 className="text-2xl font-bold mb-8">Settings</h1>
         <p className="text-muted-foreground">Loading...</p>
-        <Toaster />
-      </main>
+      </div>
     );
   }
 
@@ -44,7 +42,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <main className="container mx-auto py-8 space-y-8 px-4">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Settings</h1>
         <Button onClick={handleSave} disabled={saving}>
@@ -165,8 +163,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <Toaster />
-    </main>
+    </div>
   );
 }
 

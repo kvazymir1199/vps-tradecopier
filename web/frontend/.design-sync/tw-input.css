@@ -1,0 +1,8 @@
+/* design-sync Tailwind v4 entry — compiled to a static stylesheet for the bundle.
+   Imports the real design tokens + theme from the app's globals.css and pins the
+   content sources so every utility class used by the components AND the authored
+   previews is emitted. */
+@import "../src/app/globals.css";
+
+@source "../src";
+@source "./previews";
