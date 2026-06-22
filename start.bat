@@ -74,6 +74,11 @@ start "FastAPI Backend" cmd /k "cd /d "%~dp0" && echo Starting FastAPI on http:/
 
 timeout /t 1 /nobreak >nul
 
+:: Clear stale Next.js / Turbopack cache before dev start to avoid corrupted-cache panics.
+:: Single-line form on purpose: parentheses inside an if-block would break batch parsing.
+echo Clearing stale frontend cache...
+if exist "%~dp0web\frontend\.next" rmdir /s /q "%~dp0web\frontend\.next"
+
 echo Starting Frontend...
 start "Frontend" cmd /k "cd /d "%~dp0web\frontend" && echo Starting Next.js on http://localhost:3000 && "%NPM_CMD%" run dev"
 
