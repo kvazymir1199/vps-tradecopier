@@ -96,16 +96,21 @@ if exist "%PIP_EXE%" (
 :: ============================================================
 :: [3/6] Install Python dependencies
 :: ============================================================
-if exist "%PYTHON_DIR%\Lib\site-packages\uvicorn" (
+rem certifi is the newest dependency — checking for it (not uvicorn) makes
+rem re-running install.bat upgrade older installs that predate it.
+if exist "%PYTHON_DIR%\Lib\site-packages\certifi" (
     echo [3/6] Python dependencies already installed.
 ) else (
     echo [3/6] Installing Python dependencies...
-    rem Runtime deps for Hub + FastAPI (aiosqlite, fastapi, pywin32, uvicorn).
-    rem Telegram is implemented with stdlib urllib so python-telegram-bot is
-    rem not installed.
-    rem httpx + psutil are dev/test deps — included so MS3 stress tests and
-    rem API tests work without a second install pass.
-    "%PIP_EXE%" install aiosqlite fastapi pywin32 uvicorn httpx psutil -q --no-warn-script-location
+    rem Runtime deps for Hub + FastAPI (aiosqlite, certifi, fastapi, httpx,
+    rem pywin32, uvicorn).
+    rem Telegram talks to the Bot API over httpx (async); certifi supplies the
+    rem CA bundle it verifies against — fresh Windows VPSes often lack the
+    rem GoDaddy root in the OS store until Windows Update fetches it lazily, and
+    rem OpenSSL never downloads roots on demand.
+    rem psutil is a dev/test dep — included so MS3 stress tests run without a
+    rem second install pass.
+    "%PIP_EXE%" install aiosqlite certifi fastapi pywin32 uvicorn httpx psutil -q --no-warn-script-location
     if errorlevel 1 (
         echo ERROR: Failed to install Python dependencies.
         pause & exit /b 1

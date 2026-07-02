@@ -18,18 +18,34 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import ssl
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from collections.abc import Awaitable, Callable
 from typing import Any
+
+import certifi
+import httpx
 
 from hub.db.manager import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
 TELEGRAM_API = "https://api.telegram.org"
+
+
+def telegram_ssl_context() -> ssl.SSLContext:
+    """SSL context for all outbound Telegram API calls.
+
+    Fresh Windows VPSes often lack the GoDaddy root that api.telegram.org
+    chains to — the OS store is populated lazily via Windows Update, and
+    OpenSSL (unlike SChannel) never downloads roots on demand, so
+    verification fails with `self-signed certificate in certificate chain`.
+    Start from the OS defaults, then add the shipped certifi bundle so
+    delivery never depends on the OS store state.
+    """
+    ctx = ssl.create_default_context()
+    ctx.load_verify_locations(cafile=certifi.where())
+    return ctx
 
 # MarkdownV2 characters that MUST be escaped per Bot API spec.
 _MD_ESCAPE_CHARS = r"_*[]()~`>#+-=|{}.!"
@@ -289,21 +305,13 @@ class AlertSender:
         if not token or not chat_id:
             raise RuntimeError("telegram bot_token/chat_id not configured")
         url = f"{TELEGRAM_API}/bot{token}/sendMessage"
-        data = urllib.parse.urlencode(
-            {
-                "chat_id": chat_id,
-                "text": text_markdown,
-                "parse_mode": "MarkdownV2",
-                "disable_web_page_preview": "true",
-            }
-        ).encode()
+        data = {
+            "chat_id": chat_id,
+            "text": text_markdown,
+            "parse_mode": "MarkdownV2",
+            "disable_web_page_preview": "true",
+        }
 
-        loop = asyncio.get_running_loop()
-
-        def _blocking_post() -> None:
-            req = urllib.request.Request(url, data=data)
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                if resp.status != 200:
-                    raise RuntimeError(f"HTTP {resp.status}")
-
-        await loop.run_in_executor(None, _blocking_post)
+        async with httpx.AsyncClient(verify=telegram_ssl_context()) as client:
+            resp = await client.post(url, data=data, timeout=10)
+            resp.raise_for_status()

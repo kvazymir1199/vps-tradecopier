@@ -9,16 +9,17 @@ the latest state.
 
 from __future__ import annotations
 
-import json
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 
+import httpx
 from fastapi import APIRouter, HTTPException
 
 from hub.config import ALERT_TYPES
-from hub.monitor.alerts import TELEGRAM_API, format_markdown_v2
+from hub.monitor.alerts import (
+    TELEGRAM_API,
+    format_markdown_v2,
+    telegram_ssl_context,
+)
 from web.api.database import get_db
 from web.api.schemas import (
     MuteRequest,
@@ -127,31 +128,27 @@ async def fire_test_alert():
     text = format_markdown_v2("hub_started", None, None, body, now)
 
     url = f"{TELEGRAM_API}/bot{settings.bot_token}/sendMessage"
-    payload = urllib.parse.urlencode(
-        {
-            "chat_id": settings.chat_id,
-            "text": text,
-            "parse_mode": "MarkdownV2",
-            "disable_web_page_preview": "true",
-        }
-    ).encode()
+    payload = {
+        "chat_id": settings.chat_id,
+        "text": text,
+        "parse_mode": "MarkdownV2",
+        "disable_web_page_preview": "true",
+    }
 
     delivered = 0
     detail = "ok"
     try:
-        req = urllib.request.Request(url, data=payload)
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            if resp.status == 200:
-                delivered = 1
-            else:
-                detail = f"HTTP {resp.status}"
-    except urllib.error.HTTPError as e:
-        try:
-            err_body = e.read().decode("utf-8")
-            err_json = json.loads(err_body)
-            detail = err_json.get("description", str(e))
-        except Exception:
-            detail = str(e)
+        async with httpx.AsyncClient(verify=telegram_ssl_context()) as client:
+            resp = await client.post(url, data=payload, timeout=10)
+        if resp.status_code == 200:
+            delivered = 1
+        else:
+            # Telegram returns a JSON body with a human-readable `description`
+            # on 4xx/5xx (bad token, wrong chat_id, …) — surface it verbatim.
+            try:
+                detail = resp.json().get("description", f"HTTP {resp.status_code}")
+            except Exception:
+                detail = f"HTTP {resp.status_code}"
     except Exception as e:
         detail = str(e)
 

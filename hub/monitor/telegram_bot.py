@@ -21,15 +21,16 @@ import json
 import logging
 import re
 import time
-import urllib.parse
-import urllib.request
 from typing import Any
+
+import httpx
 
 from hub.db.manager import DatabaseManager
 from hub.monitor.alerts import (
     TELEGRAM_API,
     AlertSender,
     _md_escape,
+    telegram_ssl_context,
 )
 from hub.monitor.health import HealthChecker
 
@@ -101,23 +102,19 @@ class TelegramBot:
 
     async def _get_updates(self) -> list[dict[str, Any]]:
         url = f"{TELEGRAM_API}/bot{self._config.telegram.bot_token}/getUpdates"
-        params = urllib.parse.urlencode(
-            {
-                "offset": self._update_offset,
-                "timeout": _LONG_POLL_TIMEOUT_SEC,
-                "allowed_updates": json.dumps(["message"]),
-            }
-        )
-        loop = asyncio.get_running_loop()
+        params = {
+            "offset": self._update_offset,
+            "timeout": _LONG_POLL_TIMEOUT_SEC,
+            "allowed_updates": json.dumps(["message"]),
+        }
 
-        def _blocking_get() -> bytes:
-            with urllib.request.urlopen(
-                f"{url}?{params}", timeout=_LONG_POLL_TIMEOUT_SEC + 5
-            ) as resp:
-                return resp.read()
+        async with httpx.AsyncClient(verify=telegram_ssl_context()) as client:
+            resp = await client.get(
+                url, params=params, timeout=_LONG_POLL_TIMEOUT_SEC + 5
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
-        raw = await loop.run_in_executor(None, _blocking_get)
-        data = json.loads(raw.decode("utf-8"))
         if not data.get("ok"):
             raise RuntimeError(f"getUpdates !ok: {data}")
         updates = data.get("result", [])
