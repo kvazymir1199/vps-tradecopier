@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Link } from "@/types";
+import { Link, Terminal } from "@/types";
+import { terminalLabel } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -22,6 +23,7 @@ import {
 
 interface EditLinkDialogProps {
   link: Link | null;
+  terminals: Terminal[];
   onSubmit: (
     id: number,
     data: {
@@ -35,6 +37,7 @@ interface EditLinkDialogProps {
 
 export function EditLinkDialog({
   link,
+  terminals,
   onSubmit,
   open,
   onOpenChange,
@@ -42,6 +45,9 @@ export function EditLinkDialog({
   const [lotMode, setLotMode] = useState("multiplier");
   const [lotValue, setLotValue] = useState("1");
   const [submitting, setSubmitting] = useState(false);
+
+  const findTerminal = (id: string | undefined) =>
+    terminals.find((t) => t.terminal_id === id);
 
   useEffect(() => {
     if (link) {
@@ -76,11 +82,27 @@ export function EditLinkDialog({
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <label className="text-sm font-medium">Master</label>
-            <Input type="text" value={link?.master_id ?? ""} disabled />
+            <Input
+              type="text"
+              value={
+                link
+                  ? terminalLabel(link.master_id, findTerminal(link.master_id))
+                  : ""
+              }
+              disabled
+            />
           </div>
           <div className="grid gap-2">
             <label className="text-sm font-medium">Slave</label>
-            <Input type="text" value={link?.slave_id ?? ""} disabled />
+            <Input
+              type="text"
+              value={
+                link
+                  ? terminalLabel(link.slave_id, findTerminal(link.slave_id))
+                  : ""
+              }
+              disabled
+            />
           </div>
           <div className="grid gap-2">
             <label className="text-sm font-medium">Lot Mode</label>

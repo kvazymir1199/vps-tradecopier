@@ -37,6 +37,22 @@ export function LinksTable({ onSelectLink }: LinksTableProps) {
     useLinks();
   const { terminals } = useTerminals();
 
+  const terminalById = new Map(terminals.map((t) => [t.terminal_id, t]));
+
+  const renderTerminalCell = (terminalId: string) => {
+    const terminal = terminalById.get(terminalId);
+    return (
+      <div>
+        <div className="font-mono text-xs">{terminalId}</div>
+        {terminal && (
+          <div className="text-xs text-muted-foreground">
+            {terminal.broker_server ?? "unknown broker"} · {terminal.role}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<Link | null>(null);
@@ -130,12 +146,8 @@ export function LinksTable({ onSelectLink }: LinksTableProps) {
                 className="cursor-pointer"
                 onClick={() => onSelectLink(link.id)}
               >
-                <TableCell className="font-mono text-xs">
-                  {link.master_id}
-                </TableCell>
-                <TableCell className="font-mono text-xs">
-                  {link.slave_id}
-                </TableCell>
+                <TableCell>{renderTerminalCell(link.master_id)}</TableCell>
+                <TableCell>{renderTerminalCell(link.slave_id)}</TableCell>
                 <TableCell className="capitalize">{link.lot_mode}</TableCell>
                 <TableCell>{link.lot_value}</TableCell>
                 <TableCell>
@@ -185,6 +197,7 @@ export function LinksTable({ onSelectLink }: LinksTableProps) {
 
       <EditLinkDialog
         link={editingLink}
+        terminals={terminals}
         onSubmit={handleEdit}
         open={editOpen}
         onOpenChange={setEditOpen}
