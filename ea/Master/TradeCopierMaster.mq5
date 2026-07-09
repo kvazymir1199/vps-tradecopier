@@ -24,6 +24,15 @@ input long InpMagicMin = 0;   // Min magic (0 = no filter)
 input long InpMagicMax = 0;   // Max magic (0 = no filter)
 
 //+------------------------------------------------------------------+
+//| Copied-trade filter. The Hub marks every copied trade with a     |
+//| comment starting with "Copy:". When Master and Slave EAs run on  |
+//| the same account, the Master must skip those positions/orders —  |
+//| otherwise it re-broadcasts each copy as a new trade and every    |
+//| other slave opens a duplicate (echo loop).                       |
+//+------------------------------------------------------------------+
+input bool InpIgnoreCopiedTrades = true;  // Ignore trades opened by Slave EA (Copy: comment)
+
+//+------------------------------------------------------------------+
 //| Tracked position state                                           |
 //+------------------------------------------------------------------+
 struct TrackedPosition
@@ -264,6 +273,9 @@ void SeedTrackedPositions()
             continue;
       }
 
+      if(InpIgnoreCopiedTrades && IsCopiedTradeComment(PositionGetString(POSITION_COMMENT)))
+         continue;
+
       TrackedPosition pos;
       pos.ticket    = (long)ticket;
       pos.magic     = magic;
@@ -309,6 +321,9 @@ void SeedTrackedOrders()
             continue;
       }
 
+      if(InpIgnoreCopiedTrades && IsCopiedTradeComment(OrderGetString(ORDER_COMMENT)))
+         continue;
+
       TrackedOrder ord;
       ord.ticket    = (long)ticket;
       ord.magic     = magic;
@@ -351,6 +366,9 @@ void ScanPositions()
          if(magic < InpMagicMin || magic >= InpMagicMax)
             continue;
       }
+
+      if(InpIgnoreCopiedTrades && IsCopiedTradeComment(PositionGetString(POSITION_COMMENT)))
+         continue;
 
       TrackedPosition pos;
       pos.ticket    = (long)ticket;
@@ -506,6 +524,16 @@ int FindTrackedByTicket(long ticket)
 }
 
 //+------------------------------------------------------------------+
+//| Check if a comment marks a trade copied by the Slave EA          |
+//+------------------------------------------------------------------+
+bool IsCopiedTradeComment(const string comment)
+{
+   // Brokers may append their own text (", Placed by expert, ..."),
+   // but the "Copy:" prefix set by the Hub stays at the start.
+   return (StringFind(comment, "Copy:") == 0);
+}
+
+//+------------------------------------------------------------------+
 //| Compare two doubles with tolerance                               |
 //+------------------------------------------------------------------+
 bool CompareDouble(double a, double b)
@@ -603,6 +631,9 @@ void ScanOrders()
          if(magic < InpMagicMin || magic >= InpMagicMax)
             continue;
       }
+
+      if(InpIgnoreCopiedTrades && IsCopiedTradeComment(OrderGetString(ORDER_COMMENT)))
+         continue;
 
       TrackedOrder ord;
       ord.ticket    = (long)ticket;
