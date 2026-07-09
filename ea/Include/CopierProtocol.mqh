@@ -53,6 +53,20 @@ string JsonInt(string key, long val)
 }
 
 //+------------------------------------------------------------------+
+//| Copy-mark helper — contract between Slave and Master EAs running  |
+//| on the SAME terminal. The Slave marks every copied trade with a   |
+//| terminal GlobalVariable keyed by POSITION_IDENTIFIER (for pending |
+//| orders — by order ticket, which becomes the position identifier   |
+//| on activation). The Master skips marked trades so it never        |
+//| re-broadcasts a copy. Unlike the "Copy:" comment, the identifier  |
+//| survives partial closes and broker comment rewrites.              |
+//+------------------------------------------------------------------+
+string CopyMarkGVName(long identifier)
+{
+   return "CopierCopy_" + IntegerToString(identifier);
+}
+
+//+------------------------------------------------------------------+
 //| Timestamp helper                                                 |
 //+------------------------------------------------------------------+
 long GetTimestampMs()

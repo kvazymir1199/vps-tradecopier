@@ -273,7 +273,7 @@ void SeedTrackedPositions()
             continue;
       }
 
-      if(InpIgnoreCopiedTrades && IsCopiedTradeComment(PositionGetString(POSITION_COMMENT)))
+      if(InpIgnoreCopiedTrades && IsCopiedPosition())
          continue;
 
       TrackedPosition pos;
@@ -321,7 +321,7 @@ void SeedTrackedOrders()
             continue;
       }
 
-      if(InpIgnoreCopiedTrades && IsCopiedTradeComment(OrderGetString(ORDER_COMMENT)))
+      if(InpIgnoreCopiedTrades && IsCopiedOrder(ticket))
          continue;
 
       TrackedOrder ord;
@@ -367,7 +367,7 @@ void ScanPositions()
             continue;
       }
 
-      if(InpIgnoreCopiedTrades && IsCopiedTradeComment(PositionGetString(POSITION_COMMENT)))
+      if(InpIgnoreCopiedTrades && IsCopiedPosition())
          continue;
 
       TrackedPosition pos;
@@ -534,6 +534,32 @@ bool IsCopiedTradeComment(const string comment)
 }
 
 //+------------------------------------------------------------------+
+//| Check if the CURRENTLY SELECTED position is a Slave-copied trade.|
+//| Primary signal: the GlobalVariable mark set by the Slave EA,     |
+//| keyed by POSITION_IDENTIFIER — survives partial closes, where    |
+//| brokers may wipe the comment and reissue the ticket. Comment     |
+//| prefix kept as fallback (e.g. Slave EA older than the mark).     |
+//+------------------------------------------------------------------+
+bool IsCopiedPosition()
+{
+   long identifier = (long)PositionGetInteger(POSITION_IDENTIFIER);
+   if(GlobalVariableCheck(CopyMarkGVName(identifier)))
+      return true;
+   return IsCopiedTradeComment(PositionGetString(POSITION_COMMENT));
+}
+
+//+------------------------------------------------------------------+
+//| Same check for the CURRENTLY SELECTED pending order.             |
+//| The Slave marks pending orders by order ticket.                  |
+//+------------------------------------------------------------------+
+bool IsCopiedOrder(ulong ticket)
+{
+   if(GlobalVariableCheck(CopyMarkGVName((long)ticket)))
+      return true;
+   return IsCopiedTradeComment(OrderGetString(ORDER_COMMENT));
+}
+
+//+------------------------------------------------------------------+
 //| Compare two doubles with tolerance                               |
 //+------------------------------------------------------------------+
 bool CompareDouble(double a, double b)
@@ -632,7 +658,7 @@ void ScanOrders()
             continue;
       }
 
-      if(InpIgnoreCopiedTrades && IsCopiedTradeComment(OrderGetString(ORDER_COMMENT)))
+      if(InpIgnoreCopiedTrades && IsCopiedOrder(ticket))
          continue;
 
       TrackedOrder ord;

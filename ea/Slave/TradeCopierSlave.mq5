@@ -244,6 +244,7 @@ void ExecuteOpen(SlaveCommandData &cmd)
    if(pendingTicket != 0)
    {
       g_trade.OrderDelete(pendingTicket);
+      UnmarkCopiedTrade((long)pendingTicket);
       g_logger.Info(StringFormat("Deleted pending order %d (magic=%d) before market OPEN",
                                  pendingTicket, cmd.magic));
    }
@@ -315,6 +316,8 @@ void ExecuteOpen(SlaveCommandData &cmd)
       if(posTicket == 0)
          posTicket = dealTicket;
 
+      MarkCopiedPosition(posTicket);
+
       g_logger.Info(StringFormat("OPEN success: sym=%s dir=%s vol=%.2f ticket=%d",
                                  cmd.symbol, cmd.direction, normalizedVol, posTicket));
       SendAck(cmd.msgId, (long)posTicket);
@@ -371,10 +374,16 @@ void ExecuteClose(SlaveCommandData &cmd)
       return;
    }
 
+   long identifier = 0;
+   if(PositionSelectByTicket(ticket))
+      identifier = (long)PositionGetInteger(POSITION_IDENTIFIER);
+
    bool result = g_trade.PositionClose(ticket);
 
    if(result)
    {
+      if(identifier != 0)
+         UnmarkCopiedTrade(identifier);
       g_logger.Info(StringFormat("CLOSE success: ticket=%d", ticket));
       SendAck(cmd.msgId, (long)ticket);
    }
@@ -439,6 +448,28 @@ void ExecuteClosePartial(SlaveCommandData &cmd)
                                   ticket, retcode, g_trade.ResultComment()));
       SendNack(cmd.msgId, "ORDER_FAILED");
    }
+}
+
+//+------------------------------------------------------------------+
+//| Mark a copied position so a Master EA on the same terminal        |
+//| ignores it (see CopyMarkGVName in CopierProtocol.mqh).            |
+//| Keyed by POSITION_IDENTIFIER — stable across partial closes.      |
+//+------------------------------------------------------------------+
+void MarkCopiedPosition(ulong posTicket)
+{
+   long identifier = (long)posTicket;
+   if(PositionSelectByTicket(posTicket))
+      identifier = (long)PositionGetInteger(POSITION_IDENTIFIER);
+   GlobalVariableSet(CopyMarkGVName(identifier), 1.0);
+}
+
+//+------------------------------------------------------------------+
+//| Remove the copy mark once the copied trade is fully closed        |
+//+------------------------------------------------------------------+
+void UnmarkCopiedTrade(long identifier)
+{
+   if(GlobalVariableCheck(CopyMarkGVName(identifier)))
+      GlobalVariableDel(CopyMarkGVName(identifier));
 }
 
 //+------------------------------------------------------------------+
@@ -692,6 +723,9 @@ void ExecutePendingPlace(SlaveCommandData &cmd)
    if(result)
    {
       ulong orderTicket = g_trade.ResultOrder();
+      // On activation the position inherits this ticket as its
+      // POSITION_IDENTIFIER, so one mark covers both stages.
+      GlobalVariableSet(CopyMarkGVName((long)orderTicket), 1.0);
       g_logger.Info(StringFormat("PENDING_PLACE success: sym=%s type=%s vol=%.2f price=%.5f ticket=%d",
                                  cmd.symbol, cmd.orderType, normalizedVol, cmd.price, orderTicket));
       SendAck(cmd.msgId, (long)orderTicket);
@@ -763,6 +797,7 @@ void ExecutePendingDelete(SlaveCommandData &cmd)
 
    if(result)
    {
+      UnmarkCopiedTrade((long)ticket);
       g_logger.Info(StringFormat("PENDING_DELETE success: ticket=%d magic=%d", ticket, cmd.magic));
       SendAck(cmd.msgId, (long)ticket);
    }
