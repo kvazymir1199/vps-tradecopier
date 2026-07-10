@@ -6,13 +6,16 @@ repository (single source of truth); this folder carries the run
 
 ## Start here
 
+All documents are included in `docs/` inside this package (snapshots of
+the repository originals at the pinned commit).
+
 | Document | Purpose |
 |---|---|
-| [`docs/ms3-approval-evidence.md`](../../docs/ms3-approval-evidence.md) | **Acceptance matrix** — every client criterion → its proof (test name / report section / artifact) |
-| [`docs/ms3-stability-run.md`](../../docs/ms3-stability-run.md) | Stability run report: 35 h 51 m continuous, 0 restarts, 0 unhandled exceptions, reconciliation 116/116 |
-| [`docs/ms3-pytest-output.txt`](../../docs/ms3-pytest-output.txt) | Canonical test run at the pinned commit — 189 passed |
-| [`journal.md`](../../journal.md) | Run journal — every event with operator-confirmed root cause |
-| [`README.md`](../../README.md) (repo root) | **Runbook / handover guide**: server setup (12 phases), daily operations, health-check checklist, operator Telegram commands, troubleshooting, configuration reference |
+| [`docs/ms3-approval-evidence.md`](docs/ms3-approval-evidence.md) | **Acceptance matrix** — every client criterion → its proof (test name / report section / artifact) |
+| [`docs/ms3-stability-run.md`](docs/ms3-stability-run.md) | Stability run report: 35 h 51 m continuous, 0 restarts, 0 unhandled exceptions, reconciliation 116/116 |
+| [`docs/ms3-pytest-output.txt`](docs/ms3-pytest-output.txt) | Canonical test run at the pinned commit — 189 passed |
+| [`docs/journal.md`](docs/journal.md) | Run journal — every event with operator-confirmed root cause |
+| [`docs/runbook.md`](docs/runbook.md) | **Runbook / handover guide**: server setup (12 phases), daily operations, health-check checklist, operator Telegram commands, troubleshooting, configuration reference |
 
 ## Artifacts in this folder
 
