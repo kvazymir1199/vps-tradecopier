@@ -1,0 +1,24 @@
+window: 2026-07-08 04:46 UTC -> 2026-07-09 13:14 UTC
+
+parsed ReportHistory-168935786.xlsx: account=168935786 copy-orders=3893 own-orders=3899
+parsed ReportHistory-1715542650.xlsx: account=1715542650 copy-orders=0 own-orders=2594
+parsed ReportHistory-52953732.xlsx: account=52953732 copy-orders=19 own-orders=25
+parsed ReportHistory-591823116.xlsx: account=591823116 copy-orders=3893 own-orders=3899
+parsed ReportHistory-67185418.xlsx: account=67185418 copy-orders=1318 own-orders=3864
+parsed ReportHistory-7833734.xlsx: account=7833734 copy-orders=3894 own-orders=3900
+
+master OPENs in window: 26
+magic distribution: {0: 19, 5: 7}
+symbols: ['EURUSD', 'EURUSD.sml']
+
+per-slave delivery matrix (expected -> exactly 1 copy each):
+slave                      ok  dup  missing
+slave_168935786            26    0        0
+slave_52953732             19    0        0
+slave_591823116            26    0        0
+slave_67185418             19    0        0
+slave_7833734              26    0        0
+
+TOTAL: ok=116 duplicates=0 missing=0 nack-rejected(documented)=0 not-linked-yet=7 dropped-slave-offline=7
+
+VERDICT: RECONCILED — one copy per linked slave, no dups, no losses
