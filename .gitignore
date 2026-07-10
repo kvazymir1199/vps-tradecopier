@@ -12,3 +12,6 @@ node_modules/
 config/config.json
 uv.lock
 tools/
+# VPS run artifacts — DB and hub.log contain the Telegram bot token, never commit
+TradeCopier/
+.playwright-mcp/

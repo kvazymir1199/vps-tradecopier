@@ -65,6 +65,14 @@ def _md_escape(text: str) -> str:
     return "".join(out)
 
 
+def _md_escape_code(text: str) -> str:
+    """Escape for the INSIDE of a `code` entity, where only '`' and '\\'
+    are special — escaping anything else renders the backslash literally."""
+    if not text:
+        return ""
+    return text.replace("\\", "\\\\").replace("`", "\\`")
+
+
 def format_markdown_v2(
     alert_type: str,
     terminal_id: str | None,
@@ -84,7 +92,7 @@ def format_markdown_v2(
     """
     header = f"*\\[{_md_escape(alert_type.upper())}\\]*"
     if terminal_id:
-        header += f"  `{_md_escape(terminal_id)}`"
+        header += f"  `{_md_escape_code(terminal_id)}`"
 
     lines = [header]
     if broker:
@@ -92,8 +100,10 @@ def format_markdown_v2(
     lines.append("")
     lines.append(_md_escape(message))
     lines.append("")
+    # Inside a code span only '`' and '\' are escapable — escaping anything
+    # else shows the backslash to the operator. The timestamp contains neither.
     ts = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(fired_at_ms / 1000))
-    lines.append(f"`fired at: {_md_escape(ts)}`")
+    lines.append(f"`fired at: {ts}`")
     return "\n".join(lines)
 
 

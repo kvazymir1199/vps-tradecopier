@@ -162,8 +162,10 @@ class TelegramBot:
         uptime = f"{h:d}h {m:02d}m {s:02d}s"
 
         online = snap["online_terminals"]
+        # Literal parens are reserved in MarkdownV2 — escape them, or Telegram
+        # rejects the whole reply with 400 (seen live on the MS3 stability run).
         terminals_line = ", ".join(
-            f"{_md_escape(t['terminal_id'])}({t['role'][0]})" for t in online[:10]
+            f"{_md_escape(t['terminal_id'])}\\({t['role'][0]}\\)" for t in online[:10]
         ) or "_none_"
         if len(online) > 10:
             terminals_line += f" \\+{len(online) - 10} more"
@@ -228,8 +230,9 @@ class TelegramBot:
         until_human = time.strftime(
             "%Y-%m-%d %H:%M:%S UTC", time.gmtime(until_ms / 1000)
         )
+        # No escaping inside a code span — backslashes there render literally.
         await self._alerts.send_raw_markdown(
-            f"_alerts muted until_ `{_md_escape(until_human)}`"
+            f"_alerts muted until_ `{until_human}`"
         )
 
     async def _cmd_help(self) -> None:
